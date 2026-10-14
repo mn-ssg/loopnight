@@ -52,10 +52,11 @@
   const FILES = { hero:'images/hero.png', bg:'images/bg.png', haz:'images/haz.png', hud:'images/hud.png', words:'images/words.png', ring:'images/ring.png', logo:'images/logo.png', egg:'images/egg.png', under:'images/under.png', signs:'images/signs.png', keys:'images/keys.png', band:'images/band.png', hero_x:'images/hero_x.png', gate:'images/gate.png' };
   // under.png: bg.png·표지를 참고로 Higgsfield에서 뽑은 고가도로 아래 도시. 0~TRUSS행은 상판 밑 트러스, 그 아래는 협곡
   const assetsReady = Promise.all(Object.entries(FILES).map(([k, f]) => load(f).then(i => { IMG[k] = i; })));
-  // logo.png: 표지를 분위기 참고로 Higgsfield에서 뽑은 타이틀 로고(검은 배경에서 밝기로 투명도를 뽑은 PNG, 2048px). 번짐은 약하게만 들어 있고 빛은 게임 안에서 LOGO_GLOW로 더한다
+  // logo.png · words.png: 새 로고와 게임 스프라이트를 참고로 Higgsfield에서 한 장에 함께 뽑은 픽셀 글자 세트(같은 글꼴).
+  // 실제 픽셀 격자를 찾아 1칸 = 게임 1픽셀로 다시 찍고 게임 팔레트로 맞춘 것 — 위는 흰색, 아래는 옅은 청록, 남색 외곽선, LOOP의 O는 카세트 릴
   const HZ = { drone:[0,0,19,16], bar:[21,0,25,22], crate:[48,0,27,38], block:[77,0,27,14], spring:[106,0,19,12], gate:[127,0,73,48], sign:[202,0,13,18], car:[217,0,52,18], broken:[271,0,18,9], cas:[291,0,16,10] };
   const HU = { portrait:[0,0,51,48], bar10:[53,0,151,22], seg:[206,0,42,14], ring0:[250,0,52,50], ring1:[304,0,51,50], arm:[357,0,48,48], bar5:[407,0,82,22] };
-  const WD = { press:[0,0,123,30], ready:[125,0,114,40], go:[241,0,78,40], over:[321,0,148,40], climax:[471,0,146,46], perfect:[619,0,107,36], how:[850,0,112,30], loop:[964,0,82,36] };
+  const WD = { over:[0, 0, 154, 19], how:[156, 0, 182, 19], perfect:[340, 0, 130, 19] };
   // signs.png: 위험물 스프라이트·배경·표지를 참고로 Higgsfield에서 뽑은 간판과 점프대
   // o = 네온만 꺼진 같은 그림(깜빡임용) · n = 네온 픽셀만 남긴 흰 마스크(색 번짐·반짝임을 네온에만 입히려고)
   const SG = { low64:[0,0,64,23], low64o:[65,0,64,23], low50:[130,0,50,18], low50o:[181,0,50,18], low36:[232,0,36,13], low36o:[269,0,36,13],
@@ -87,7 +88,7 @@
     TCACHE.set(key, c); return c;
   }
   const sgTint = (k, col) => tintPart(IMG.signs, SG[k], col);
-  const word = (n, cx, y, s = 1) => hi(IMG.words, WD[n], cx - WD[n][2] * s / 2, y, s);
+  const word = (n, cx, y) => pix(IMG.words, WD[n], Math.round(cx - WD[n][2] / 2), y); // 픽셀 글자는 1:1, 정수 위치에만
 
   const CW = 37, CH = 38;
   let TINT = null, XTINT = null;
@@ -183,7 +184,7 @@
   // 출발선 앞 구간엔 게이트가 GATE_GAP마다 똑같이 다시 지나가서, 세계 자체가 반복된다는 걸 말없이 보여준다
   // IDLE_T 동안 입력이 없으면 설명·기록 페이지(INFO_T씩 4장)를 같은 배경 위에 보여주고 돌아온다
   // 시작(ENTER_T, 약 1초): 로고가 사라지고 → 카메라가 플레이 위치로 올라오며 → 주인공이 달려 들어와(ENTER_CTRL부터 조작) → HUD가 켜진다
-  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = .54, LOGO_GLOW = .35;
+  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = .54, LOGO_GLOW = .2;
   const GATE_AP = [600, 300, 120], WARP_T = 45, WARP_PER = 4, OSD_T = 150, OSD_BIG = 72, SNAP_EVERY = 20, SNAP_MAX = 36;
   // 깨진 CRT 자막으로 새어 나오는 시스템 메시지 (LOOP_은 지금 바퀴 번호가 붙는다)
   const GLITCH = ['REWIND', 'TIME ERROR', 'AGAIN', '00:00:00', '<<', 'TRACKING', 'ERR 0x0F', 'LOOP_'], GLITCH_HIT = ['REWIND', '<<', '-00:00:01:36', 'ERR'];
@@ -1960,22 +1961,22 @@
   // 평소엔 조용하다: 6~9초에 한 번 로고가 몇 프레임 살짝 찢어지며 색이 갈라지거나 밝기가 흔들리고, PRESS ANY KEY는 박자에 맞춰 밝기만 숨 쉰다
   function drawLogo(a, t) {
     const lg = IMG.logo; if (!ok(lg) || a <= 0) return;
-    const w = Math.round(W * LOGO_W), h = Math.round(w * lg.height / lg.width), x = Math.round(W / 2 - w / 2), y = Math.round(H * .3 - h / 2), cy = y + h / 2;
+    // 픽셀 로고: 화면 너비의 LOGO_W를 넘지 않는 가장 큰 정수 배율로만 키운다(픽셀이 고르게 남게)
+    const k = Math.max(1, Math.floor(W * LOGO_W / lg.width)), w = lg.width * k, h = lg.height * k, x = Math.round(W / 2 - w / 2), y = Math.round(H * .3 - h / 2), cy = y + h / 2;
     const g = ctx.createRadialGradient(W / 2, cy, 0, W / 2, cy, w * .62); g.addColorStop(0, `rgba(2,6,10,${(.6 * a).toFixed(3)})`); g.addColorStop(1, 'rgba(2,6,10,0)');
     ctx.save(); ctx.translate(W / 2, cy); ctx.scale(1, .4); ctx.translate(-W / 2, -cy); ctx.fillStyle = g; ctx.fillRect(0, cy - w * .62, W, w * 1.24); ctx.restore();
     // 시작해서 사라지는 중엔 글리치 없이 조용히 빠진다
     const cyc = t % 480, gl = mode === 'title' && cyc > 470 - Math.floor(hash(Math.floor(t / 480)) * 90) && cyc <= 474 - Math.floor(hash(Math.floor(t / 480)) * 90), flick = mode === 'title' && (cyc === 233 || cyc === 235);
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    ctx.globalAlpha = .7 * a; ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.ink), x + 1, y + 2, w, h);
+    ctx.globalAlpha = .7 * a; ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.ink), x + k, y + 2 * k, w, h);
     if ('filter' in ctx) { ctx.filter = 'blur(3px)'; ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = LOGO_GLOW * a; ctx.drawImage(lg, x, y, w, h); ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; }
     ctx.globalAlpha = a * (flick ? .55 : 1); ctx.drawImage(lg, x, y, w, h);
     if (gl) {
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5 * a;
       ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.pink), x - 2, y, w, h); ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.glow), x + 2, y, w, h);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
-      for (let i = 0; i < 2; i++) { const sy = Math.floor(hash(t * .7 + i) * lg.height * .8), sh = Math.floor(lg.height * (.08 + hash(t + i) * .1)); ctx.drawImage(lg, 0, sy, lg.width, sh, x + (i ? 3 : -3), y + sy * h / lg.height, w, sh * h / lg.height); }
+      for (let i = 0; i < 2; i++) { const sy = Math.floor(hash(t * .7 + i) * lg.height * .8), sh = Math.max(1, Math.floor(lg.height * (.08 + hash(t + i) * .1))); ctx.drawImage(lg, 0, sy, lg.width, sh, x + (i ? 2 : -2) * k, y + sy * k, w, sh * k); }
     }
-    ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1;
   }
   function drawPressKey(a, t) {
     if (a <= 0) return;
@@ -1988,7 +1989,7 @@
   function drawInfo(page) {
     const oy = (H - DECK) / 2;
     if (page === 1 || page === 2) {
-      word('how', W / 2, 10 + oy);
+      word('how', W / 2, 16 + oy);
       const list = page === 1
         ? [['01', K.t1, K.d1, (x, y) => TINT && heroFrame(TINT[C.teal], 6, x, y + 18)], ['02', K.t2, K.d2, (x, y) => signboard(x - 18, y + 8, 36, y - 16, 3, false, titleT)],
            ['03', K.t3, K.d3, (x, y) => hz('drone', x - 10, y - 4)], ['04', K.t4, K.d4, (x, y) => pix(IMG.haz, HZ.sign, x - 6, y - 8)]]
@@ -2108,7 +2109,7 @@
     else if (S.enter && S.enter.t < 18) drawTitleUI(1 - S.enter.t / 18);
     if (mode === 'play') {
       if (S.banner > 0 && !loopBusy()) {
-        if (S.bannerWord) word(S.bannerWord, W / 2, H / 2 - 52);
+        if (S.bannerWord) word(S.bannerWord, W / 2, H / 2 - 44);
         if ((S.banner >> 3) % 2 === 0) txt(S.sub, W / 2, H / 2 - 4, C.white, 8, 'center');
       }
     }
@@ -2117,7 +2118,7 @@
       dim(Math.min(.7, S.overT / 40));
       if (S.overT > 20) {
         const cy = H / 2;
-        word('over', W / 2, cy - 88);
+        word('over', W / 2, cy - 76);
         txt('SCORE', W / 2 - 60, cy - 32, C.mist, 8); num(String(score()).padStart(7, '0'), W / 2 + 70, cy - 32, C.white, 8, 'right');
         txt('BEST', W / 2 - 60, cy - 16, C.mist, 8); num(String(best).padStart(7, '0'), W / 2 + 70, cy - 16, C.white, 8, 'right');
         txt('LOOP', W / 2 - 60, cy, C.mist, 8); num(String(S.lap), W / 2 + 70, cy, C.white, 8, 'right');
