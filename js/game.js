@@ -15,7 +15,7 @@
   const BASE_W = 1920, BASE_H = 1080, H = 270, DECK = 256, VIEW_TOP = H - DECK, MIN_AR = 16 / 10, MAX_AR = 21 / 9;
   let W = BASE_W * H / BASE_H, SX = BASE_H / H, SY = BASE_H / H;
   const GROUND = 208, HX = 120, TRACK = 2600, STEP = 1000 / 60;
-  const GRAV = 0.45, JUMP1 = -7.6, JUMP2 = -6.6, SPRING = -10.8, STOMP = -7.2, HPMAX = 5, GAUGE = 50, CLIMAX_T = 180;
+  const GRAV = 0.45, JUMP1 = -7.6, JUMP2 = -6.6, SPRING = -10.8, STOMP = -7.2, HPMAX = 5, GAUGE = 50, CLIMAX_T = 108;
   const SECRET_AT = 1150, SECRET_LAP = 5, SIGN_GAP = 90;
   // IDIOTAPE LIVE: 5의 배수 바퀴(5, 10, 15…)에만 벽에 IDIOTAPE 무대 그림이 걸리고, 그 그림이 화면에 들어오면 공연이 게임을 점거한다(약 6초)
   // 바퀴가 넘어가기 전에 끝나도록 LIVE_END에서 끊는다
@@ -25,7 +25,7 @@
   // SLAB 상판 앞면 두께 · TRUSS under.png 위쪽 트러스 띠 높이 · FAR 협곡 원경(느리게 움직여 멀어 보임) · CAM 카메라가 따라 내려가는 최대 깊이
   const SLAB = 8, TRUSS = 78, FALL_T = 40, FALL_G = .5, FALL_VMAX = 8, CAM_MAX = 340, FAR_Y0 = 160, FAR_PX = .35, FAR_PY = .45;
   const cv = document.getElementById('game');
-  const ctx = cv.getContext('2d');
+  let ctx = cv.getContext('2d'); // HUD를 서서히 켤 때만 잠깐 다른 캔버스로 바꿔 그린다
   // 캔버스의 실제 픽셀 = 화면에 보이는 크기 × 기기 배율 (1080p 전체 화면이면 정확히 1920×1080). CSS로 다시 늘이지 않아 픽셀이 흐려지지 않는다
   function fit() {
     const vw = innerWidth, vh = innerHeight, ar = vw / vh, a = Math.min(MAX_AR, Math.max(MIN_AR, ar));
@@ -49,12 +49,10 @@
   /* ================= 그림: 표지·게임 장면 이미지를 참고로 Higgsfield에서 뽑아 다듬은 것 ================= */
   const load = src => new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(i); i.src = src; });
   const IMG = {};
-  const FILES = { hero:'images/hero.png', bg:'images/bg.png', haz:'images/haz.png', hud:'images/hud.png', words:'images/words.png', ring:'images/ring.png', logo:'images/logo.png', title:'images/title.jpg', egg:'images/egg.png', under:'images/under.png', signs:'images/signs.png', keys:'images/keys.png', band:'images/band.png' };
+  const FILES = { hero:'images/hero.png', bg:'images/bg.png', haz:'images/haz.png', hud:'images/hud.png', words:'images/words.png', ring:'images/ring.png', logo:'images/logo.png', egg:'images/egg.png', under:'images/under.png', signs:'images/signs.png', keys:'images/keys.png', band:'images/band.png', hero_x:'images/hero_x.png', gate:'images/gate.png' };
   // under.png: bg.png·표지를 참고로 Higgsfield에서 뽑은 고가도로 아래 도시. 0~TRUSS행은 상판 밑 트러스, 그 아래는 협곡
   const assetsReady = Promise.all(Object.entries(FILES).map(([k, f]) => load(f).then(i => { IMG[k] = i; })));
-  // 대기 화면 첫 장: 표지 그림(title.jpg)을 Higgsfield로 움직이게 만든 5초 무한 반복 영상. 첫·끝 프레임이 표지 그림과 같아서 정지 그림에서 자연스럽게 이어진다
-  const titleVideo = Object.assign(document.createElement('video'), { src:'images/title-loop.mp4', muted:true, loop:true, playsInline:true, preload:'auto' });
-  const playTitle = on => { if (on && titleVideo.paused) titleVideo.play().catch(() => {}); else if (!on && !titleVideo.paused) titleVideo.pause(); };
+  // logo.png: 표지를 분위기 참고로 Higgsfield에서 뽑은 타이틀 로고(검은 배경에서 밝기로 투명도를 뽑은 PNG, 2048px). 번짐은 약하게만 들어 있고 빛은 게임 안에서 LOGO_GLOW로 더한다
   const HZ = { drone:[0,0,19,16], bar:[21,0,25,22], crate:[48,0,27,38], block:[77,0,27,14], spring:[106,0,19,12], gate:[127,0,73,48], sign:[202,0,13,18], car:[217,0,52,18], broken:[271,0,18,9], cas:[291,0,16,10] };
   const HU = { portrait:[0,0,51,48], bar10:[53,0,151,22], seg:[206,0,42,14], ring0:[250,0,52,50], ring1:[304,0,51,50], arm:[357,0,48,48], bar5:[407,0,82,22] };
   const WD = { press:[0,0,123,30], ready:[125,0,114,40], go:[241,0,78,40], over:[321,0,148,40], climax:[471,0,146,46], perfect:[619,0,107,36], how:[850,0,112,30], loop:[964,0,82,36] };
@@ -66,6 +64,10 @@
   // keys.png: Higgsfield로 뽑은 카세트 데크 버튼(↑)을 ←/→로 돌린 것. 방향마다 켜짐 · o 꺼짐 · n 네온 마스크(능력 색을 입힘)
   const KY = { up:[0,0,24,24], upo:[25,0,24,24], upn:[50,0,24,24], left:[75,0,24,24], lefto:[100,0,24,24], leftn:[125,0,24,24],
                right:[150,0,24,24], righto:[175,0,24,24], rightn:[200,0,24,24] };
+  // gate.png: bg.png·간판을 스타일 참고로 Higgsfield에서 뽑은 Loop Gateway 부품 — 천장 마운트(링 중심 28,80) · 카세트 릴 · 바닥 받침(링 중심 36,25)
+  const GT = { mount:[0, 0, 56, 109], reel:[57, 0, 40, 40], base:[98, 0, 73, 68] };
+  // hero_x.png: hero.png 8프레임을 참고로 Higgsfield에서 뽑은 변신 형태(TAPE-RUNNER) — 바이저 눈 · 머리끝 발광, 몸을 두른 네온 회로, 뒤로 흩어지는 노이즈 픽셀
+  // 윗줄(0~CH) = 변신한 몸, 아랫줄(CH~2CH) = 네온 픽셀만 남긴 흰 마스크(능력 색을 입힌다). 프레임 배치는 hero.png와 같다
   // band.png: egg.png의 IDIOTAPE를 참고로 Higgsfield에서 뽑은 연주자 홀로그램(3줄마다 주사선). 줄마다 [기본, 타격A, 타격B] 3프레임, 프레임 크기 w×h
   const BAND = { synth:{ n:3, w:87, h:120, y:0 }, drum:{ n:3, w:105, h:112, y:120 } };
   const SLOT5 = [[7,19],[21,34],[36,48],[50,62],[65,78]], SLOT9 = [[6,20],[22,36],[38,51],[53,67],[69,82],[85,98],[100,114],[116,129],[131,143]];
@@ -88,11 +90,21 @@
   const word = (n, cx, y, s = 1) => hi(IMG.words, WD[n], cx - WD[n][2] * s / 2, y, s);
 
   const CW = 37, CH = 38;
-  let TINT = null;
+  let TINT = null, XTINT = null;
+  // 그림의 한 줄(sy부터 CH 높이)을 한 색으로 칠한 사본
+  function tintRow(img, sy, col) {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = CH;
+    const g = c.getContext('2d'); g.drawImage(img, 0, sy, img.width, CH, 0, 0, img.width, CH);
+    g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, c.width, CH);
+    return c;
+  }
   function makeTints() {
+    const x = IMG.hero_x;
+    // 변신 네온: 능력마다 다른 색 · 흰색 몸 실루엣은 변신 순간 번쩍임용
+    if (ok(x)) { XTINT = { body:tintRow(x, 0, C.white) }; for (const col of [C.pink, C.white, C.yellow, C.red, C.glow]) XTINT[col] = tintRow(x, CH, col); }
     const s = IMG.hero; if (!ok(s)) return;
     TINT = {};
-    for (const col of [C.teal, C.pink, C.yellow, C.white]) {
+    for (const col of [C.teal, C.pink, C.yellow, C.white, C.red]) {
       const c = document.createElement('canvas'); c.width = s.width; c.height = s.height;
       const g = c.getContext('2d'); g.drawImage(s, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = col; g.fillRect(0, 0, c.width, c.height);
       TINT[col] = c;
@@ -133,8 +145,8 @@
     t4:'뒤에서 오는 차', d4:'! 표시가 뜨면 차가 지날 때 공중에',
     t5:'전기 게이트', d5:'박자에 맞춰 꺼지는 순간 통과',
     t6:'되감기', d6:'잔상 없이 부딪히면 2초 전으로 되감긴다',
-    t7:'CLIMAX', d7:'게이지가 차면 방향키로 ↑정화 ←돌진 →가속',
-    pu:'테이프 마모 한 단계를 걷어낸다', br:'무적 돌진, 장애물을 부순다', od:'가속 · 점수 2배 · 잔상 자동 SYNC',
+    t7:'CLIMAX', d7:'게이지가 차면 방향키로 ←돌파 ↑정화 →가속',
+    pu:'마모 한 단계 제거 · 잠시 마모 면역 · 잔상 복구', br:'짧은 무적 돌진 · 연속으로 부술수록 점수 · 2단 점프 불가', od:'가속 · 높은 점프 · 3단 점프 · 잔상이 장애물을 부순다',
     t8:'잔상', d8:'지난 루프의 나. 대신 맞고, 같이 넘으면 SYNC',
     tw:'한 바퀴마다 테이프가 닳고, 대신 새 기능이 생긴다',
     w1:'화면에 약한 CRT 노이즈', a1:'지난 루프의 내가 따라온다',
@@ -150,35 +162,103 @@
     { bad:'WOW', badK:K.w2, good:'BEAT JUMP', goodK:K.a2 },
     { bad:'DROPOUT', badK:K.w3, good:'ECHO LEAD', goodK:K.a3 },
     { bad:'TANGLE', badK:K.w4, good:'FF DASH', goodK:K.a4 }];
-  // CLIMAX 선택: 게이지가 차면 세계가 느려지고 방향키로 하나를 고른다. 지금의 안전(BREAK) · 앞날의 회복(PURIFY) · 점수 욕심(OVERDRIVE)
-  // 안 고르면 PICK_T 뒤 BREAK — 흐름이 멈추지 않게
+  // CLIMAX 선택: 게이지가 차면 세계가 느려지고 방향키로 하나를 고른다
+  // ← BREAK 공격·돌파: 짧게(CLIMAX_T) 무적으로 부수며 지나간다. 대신 몸이 무거워 2단 점프·FF DASH가 막히고, 끝나면 HEAT_T 동안 과열(게이지 안 참 · 2단 점프 불가)
+  // ↑ PURIFY 생존·정화: 마모 한 단계를 영구로 걷어내고(없으면 다음 바퀴 마모를 미리 봉인), CLEAN 동안 모든 마모 면역 · 잃은 잔상 하나 복구 · SYNC 판정이 넓어지고 게이지가 계속 찬다
+  //                     마모가 깊을수록 CLEAN이 길어져서 후반일수록 값어치가 오른다
+  // → OVERDRIVE 속도·숙련: 무적 없이 빠르고 높이 뛴다(3단 점프). 넘은 장애물은 바짝 붙은 잔상들이 부수고(ECHO STRIKE), 그동안 번 게이지는 끝날 때 1.5배로 돌려받는다
+  // 안 고르면 PICK_T 뒤 선택 없이 게이지가 PICK_KEEP만큼 남는다 — 흐름은 멈추지 않고, 어느 쪽도 기본값이 되지 않게
   const POWERS = { up:{ name:'PURIFY', col:C.white, k:K.pu }, left:{ name:'BREAK', col:C.pink, k:K.br }, right:{ name:'OVERDRIVE', col:C.yellow, k:K.od } };
-  const PICK_T = 100, PICK_SLOW = .3, DRIVE_T = 240;
+  const PICK_T = 100, PICK_SLOW = .3, PICK_KEEP = .6, DRIVE_T = 300, HEAT_T = 60, CLEAN_T = 180, CLEAN_PER = 60;
+  const BREAK_JUMP = .92, OD_JUMP = 1.1, OD_SPEED = 1.4, OD_BANK = 1.5;
+  // 변신 연출: 입력 → XF_STOP 동안 Hit Stop(세계 정지, 실루엣이 하얗게) → 4프레임째 변신 → XF_IN까지 화면 반응(줌 · RGB 분리 · 플래시 · 베이스) → 능력 실행
+  // 끝나기 XF_OUT 전부터 네온이 아래부터 꺼지고 잔상이 몸으로 모이며, 끝나는 순간 테이프 띠가 끊겨 날아간다(XF_SNAP)
+  const XCOL = { left:C.pink, up:C.white, right:C.yellow }, XACC = { left:C.red, up:C.glow, right:C.white };
+  const XF_STOP = 8, XF_IN = 22, XF_OUT = 24, XF_SNAP = 20;
+  // Loop Gateway (TAPE RIFT): 천장 릴과 바닥 릴 사이에 세로로 감긴 자기 테이프, 그 사이가 찢어진 시간 균열 — 균열 안에선 이번 바퀴의 실제 장면이 거꾸로 흐른다
+  // GATE_AP 접근 1·2·3단계 거리(px) · WARP_T 통과 연출(바퀴가 쌓일수록 WARP_PER씩 길어져 최대 1초) · OSD_T 루프 번호 표시(처음 OSD_BIG 동안 가운데 크게)
+  // SNAP_EVERY 프레임마다 화면을 녹화해 SNAP_MAX장까지 남긴다 (균열 · 되감기 필름 · 과거 장면 깜빡임)
+  const GATE_TOP = 26, GATE_BOT = 186, REEL_R = 20, RIFT_W = 18;
+  // 타이틀: 실제 게임 세계가 플레이 속도로 흐르는 화면 위에 로고와 PRESS ANY KEY만. 카메라를 TITLE_CAM만큼 내려 고가도로 아래 도시까지 보인다
+  // 출발선 앞 구간엔 게이트가 GATE_GAP마다 똑같이 다시 지나가서, 세계 자체가 반복된다는 걸 말없이 보여준다
+  // IDLE_T 동안 입력이 없으면 설명·기록 페이지(INFO_T씩 4장)를 같은 배경 위에 보여주고 돌아온다
+  // 시작(ENTER_T, 약 1초): 로고가 사라지고 → 카메라가 플레이 위치로 올라오며 → 주인공이 달려 들어와(ENTER_CTRL부터 조작) → HUD가 켜진다
+  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = .54, LOGO_GLOW = .35;
+  const GATE_AP = [600, 300, 120], WARP_T = 45, WARP_PER = 4, OSD_T = 150, OSD_BIG = 72, SNAP_EVERY = 20, SNAP_MAX = 36;
+  // 깨진 CRT 자막으로 새어 나오는 시스템 메시지 (LOOP_은 지금 바퀴 번호가 붙는다)
+  const GLITCH = ['REWIND', 'TIME ERROR', 'AGAIN', '00:00:00', '<<', 'TRACKING', 'ERR 0x0F', 'LOOP_'], GLITCH_HIT = ['REWIND', '<<', '-00:00:01:36', 'ERR'];
 
   /* ================= 상태 ================= */
-  let mode = 'attract', held = false, S = null, attractT = 0, attractScroll = 0;
+  let mode = 'title', held = false, S = null, titleT = 0, idleT = 0;
   let best = 0, bestLoop = 1, newRecord = false;
   try { best = +localStorage.getItem('loopnight-best') || 0; bestLoop = +localStorage.getItem('loopnight-bestloop') || 1; } catch (e) {}
-  const speedOf = () => Math.min(6, 3 + 0.3 * (S.lap - 1)) + (S.climax > 0 ? 0.8 : 0) + (S.drive > 0 ? 1.5 : 0);
+  // 플레이 로그: CLIMAX 선택마다 방향 · 바퀴 · 마모 · HP · 잔상 수, 능력이 끝날 때 그동안 번 점수와 맞았는지(hit) · 그 사이 게임오버(died)
+  // 콘솔에서 LOOPNIGHT.log()로 방향별 선택률 표, LOOPNIGHT.clear()로 비우기. 대기 화면 기록 페이지에도 선택률 한 줄
+  const LOG_KEY = 'loopnight-picks', LOG_MAX = 500;
+  let picks = [];
+  try { picks = JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch (e) {}
+  const savePicks = () => { try { localStorage.setItem(LOG_KEY, JSON.stringify(picks)); } catch (e) {} };
+  const pickRate = () => {
+    const n = { left:0, up:0, right:0 }; for (const p of picks) if (p.dir in n) n[p.dir]++;
+    const all = n.left + n.up + n.right; return all ? { all, left:n.left / all, up:n.up / all, right:n.right / all } : null;
+  };
+  window.LOOPNIGHT = {
+    log() {
+      const NAME = { left:'← BREAK', up:'↑ PURIFY', right:'→ OVERDRIVE', none:'(시간 초과)' }, rate = pickRate(), sum = {}, laps = {};
+      for (const p of picks) {
+        const r = sum[p.dir] || (sum[p.dir] = { n:0, hit:0, died:0, gain:0 });
+        r.n++; r.hit += p.hit ? 1 : 0; r.died += p.died ? 1 : 0; r.gain += p.gain || 0;
+        if (p.dir === 'none') continue;
+        const b = p.lap >= 5 ? 'LOOP 5+' : 'LOOP ' + p.lap, l = laps[b] || (laps[b] = { '← BREAK':0, '↑ PURIFY':0, '→ OVERDRIVE':0 });
+        l[NAME[p.dir]]++;
+      }
+      const table = {};
+      for (const d of ['left', 'up', 'right', 'none']) {
+        const r = sum[d]; if (!r) continue;
+        table[NAME[d]] = { '선택률':d === 'none' || !rate ? '-' : (rate[d] * 100).toFixed(1) + '%', '횟수':r.n, '능력 중 피격':r.hit, '게임오버':r.died, '평균 획득 점수':d === 'none' ? '-' : Math.round(r.gain / r.n) };
+      }
+      console.table(table); console.table(laps);
+      return picks.length;
+    },
+    clear() { picks = []; savePicks(); }
+  };
+  const speedOf = () => (Math.min(6, 3 + 0.3 * (S.lap - 1)) + (S.climax > 0 ? 0.8 : 0)) * (S.drive > 0 ? OD_SPEED : 1);
   // 곡이 있으면 곡의 템포 고정, 없으면 신스 음악이 바퀴·CLIMAX에 따라 빨라진다
   const bpm = () => bgm.active ? BGM.bpm : (116 + Math.min(8, S ? S.lap : 1) * 5) * (S && (S.climax > 0 || S.drive > 0) ? 1.12 : 1);
   const fpb = () => 3600 / bpm();
   const score = () => Math.floor(S.total / 10) + Math.floor(S.pts);
   const newRec = () => new Float32Array(Math.ceil(TRACK / 4) + 2);
 
-  function newGame() {
-    S = { d:-220, prevD:-220, total:0, pts:0, lap:1, y:GROUND, vy:0, ground:true, jumps:0, spin:0, buf:0, queued:false, noCut:false,
-          hp:HPMAX, inv:0, shake:0, flash:0, freeze:0, slow:0, banner:0, bannerWord:null, sub:'', intro:110, loopFx:0,
+  function freshState() {
+    return { d:-220, prevD:-220, total:0, pts:0, lap:1, y:GROUND, vy:0, ground:true, jumps:0, spin:0, buf:0, queued:false, noCut:false,
+          hp:HPMAX, inv:0, shake:0, flash:0, freeze:0, slow:0, banner:0, bannerWord:null, sub:'', enter:null,
           rec:newRec(), ghosts:[], hist:[], past:[], rw:null, pendingRewind:false, live:0, liveLen:0, liveIn:LIVE_IN, liveDone:false, beatHit:false, anim:0, beatT:0, overT:0,
           pops:[], parts:[], debris:[], gauge:0, climax:0, combo:0, chain:0, lapHit:false, falling:0, cars:[], springT:{},
           cam:0, camV:0, trail:[], fallX:0, fallSp:0, padPh:{}, guardFx:null, echoIn:0, ff:0, ffUsed:false, tapeCard:0, beatFx:0, purged:0, pick:null, pickFx:null, drive:0, cleanFx:0,
+          heat:0, clean:0, cleanMax:1, smash:0, odBank:0, lost:[], pickLog:null,
+          xfIn:null, xfOut:null, rings:[], xfp:[], odTrail:[], cleanW:0,
+          warp:null, osd:null, gateCue:false, reel:0, pastFx:0, pastFilm:null,
           broken:new Set(), got:new Set(), near:new Set(), fired:new Set() };
-    newRecord = false;
-    setMode('play'); music.start(); muffle(20000, .05);
+  }
+  // 타이틀: 새 세계를 만들어 카메라를 내린 채 흘려보낸다. 소리가 이미 허용된 뒤(게임오버 뒤 돌아온 경우)면 곡이 벽 너머처럼 먹먹하게 흐른다
+  function enterTitle() {
+    S = freshState(); S.d = S.prevD = -(W - HX) - 80 - GATE_GAP / 2; S.cam = TITLE_CAM;
+    titleT = 0; idleT = 0; snaps.length = 0;
+    setMode('title');
+    if (ac && ac.state === 'running') { music.start(); muffle(700, .4); }
+  }
+  // 시작: 세계는 멈추지 않는다. 다가오는 게이트 가운데 첫 장애물이 아직 화면 밖에 있을 만큼 앞선 것을 출발선(p = 0)으로 삼는다
+  // 게이트가 GATE_GAP마다 반복되니 그만큼 좌표를 옮겨도 화면은 그대로다. 곡은 처음부터 다시 틀지 않고 먹먹함만 걷어낸다
+  function startGame(fromOver) {
+    const j = Math.max(0, Math.floor(-(S.d + W - HX - 120) / GATE_GAP));
+    S.d += j * GATE_GAP; S.prevD += j * GATE_GAP;
+    S.enter = { t:fromOver ? 18 : 0 }; newRecord = false;
+    setMode('play');
+    if (music.on) muffle(20000, .5); else { music.start(); muffle(20000, .05); }
+    sfx('play');
   }
   function setMode(m) {
     const prev = mode; mode = m;
-    if (m === 'attract') { attractT = 0; music.stop(); }
     if (m === 'over') music.stop(true);
     if (m !== 'play') muffle(20000, .05);
     if (bgm.active && m === 'pause' && prev === 'play') { bgm.pos = bgmTime(); bgmHalt(); }
@@ -186,6 +266,7 @@
   }
   function gameOver() {
     setMode('over'); S.overT = 0;
+    if (S.pickLog) { S.pickLog.died = true; endPower(); }
     if (score() > best) { best = score(); newRecord = true; }
     if (S.lap > bestLoop) bestLoop = S.lap;
     try { localStorage.setItem('loopnight-best', String(best)); localStorage.setItem('loopnight-bestloop', String(bestLoop)); } catch (e) {}
@@ -193,14 +274,15 @@
   }
 
   /* ================= 소리 ================= */
-  let ac = null, noiseBuf = null, master = null;
+  let ac = null, noiseBuf = null, master = null, cut = null;
   function ensureAudio() {
     if (!ac) {
       try {
         ac = new (window.AudioContext || window.webkitAudioContext)();
         noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.6, ac.sampleRate);
         const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        master = ac.createBiquadFilter(); master.type = 'lowpass'; master.frequency.value = 20000; master.connect(ac.destination);
+        master = ac.createBiquadFilter(); master.type = 'lowpass'; master.frequency.value = 20000;
+        cut = ac.createGain(); master.connect(cut).connect(ac.destination); // 게이트 통과 때 모든 소리를 순간 끊는 스위치
         bgm.gain = ac.createGain(); bgm.gain.connect(master);
         bgm.an = ac.createAnalyser(); bgm.an.fftSize = 64; bgm.fq = new Uint8Array(32); bgm.gain.connect(bgm.an);
       } catch (e) { ac = null; }
@@ -227,6 +309,10 @@
     const t = ac.currentTime, q = master.frequency; q.cancelScheduledValues(t); q.setValueAtTime(q.value, t); q.exponentialRampToValueAtTime(f, t + dur);
     if (bgm.el && bgm.active) bgm.el.volume = BGM.volume * (f < 5000 ? .4 : 1); // <audio> 재생은 필터 대신 볼륨으로
   }
+
+  // 오디오를 순간 끊는다(sec초 뒤 복귀) · 바로 되살린다
+  function audioCut(sec) { if (!cut) return; const t = ac.currentTime, g = cut.gain; g.cancelScheduledValues(t); g.setValueAtTime(0, t); g.setValueAtTime(1, t + sec); }
+  function audioOn() { if (!cut) return; const t = ac.currentTime; cut.gain.cancelScheduledValues(t); cut.gain.setValueAtTime(1, t); }
 
   /* ================= BGM 재생 ================= */
   // http(s)로 열면 Web Audio로 재생: 정확한 박자 시계 · 되감기 때 곡을 실제로 거꾸로 감기 · 필터 · 실제 스펙트럼.
@@ -255,6 +341,14 @@
       bgm.src = s; bgm.startAt = ac.currentTime - t;
     } else if (bgm.el && !rev) { bgm.el.currentTime = mod(t, bgm.el.duration || 1); bgm.el.play().catch(() => {}); }
     bgm.playing = !rev;
+  }
+  // 게이트에 다가가는 동안: 곡을 거꾸로 돌린 소리가 통과 순간까지 아주 작게 차오른다 (Web Audio로 곡을 읽었을 때만)
+  function bgmGhost(dur) {
+    if (!bgm.rev || !ac || !bgm.playing) return;
+    const s = ac.createBufferSource(), g = ac.createGain(), len = bgm.buf.duration, t = ac.currentTime;
+    s.buffer = bgm.rev; s.connect(g).connect(master);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.2 * BGM.volume, t + dur);
+    s.start(t, mod(len - bgmTime(), len)); s.stop(t + dur); bgm.ghost = s;
   }
   function bgmHalt() { if (bgm.src) { try { bgm.src.stop(); } catch (e) {} bgm.src = null; } if (bgm.el) bgm.el.pause(); bgm.playing = false; }
   // 곡 안의 지금 위치(초). Web Audio에선 곡이 반복돼도 계속 이어지는 값이라 박자가 끊기지 않는다
@@ -298,6 +392,23 @@
     else if (n === 'pickOpen') { tone(880, 180, .35, 'sawtooth', .035); noise(now, .05, .4, 600, 'lowpass'); }
     else if (n === 'choose') { [[523, 784, 1047], [392, 587, 784], [659, 988, 1319]][x].forEach((f, i) => tone(f, f * 1.01, .35, 'square', .04, now + i * .03)); noise(now, .07, .4, 2500, 'bandpass'); }
     else if (n === 'deny') tone(140, 110, .15, 'square', .05);
+    // 변신: 몸을 울리는 낮은 베이스 펄스 + 능력마다 다른 윗소리 / 해제: 피치가 떨어지며 테이프가 툭 끊긴다
+    else if (n === 'xform') {
+      tone(95, 32, .5, 'sine', .32); noise(now, .1, .3, 260, 'lowpass');
+      if (x === 1) { tone(220, 55, .35, 'sawtooth', .05, now + .07); noise(now + .07, .08, .2, 1200, 'bandpass'); }
+      else if (x === 0) { tone(1046, 1568, .45, 'sine', .045, now + .07); tone(1568, 2093, .45, 'triangle', .025, now + .1); }
+      else { tone(330, 1760, .3, 'square', .03, now + .07); noise(now + .07, .06, .3, 4000, 'bandpass'); }
+    }
+    // 게이트: 다가가면 거꾸로 감긴 심벌처럼 통과 순간까지 차오르는 소리(x = 남은 초) · 통과 때 테이프가 감기며 피치가 떨어지는 소리(x = 길이) · 새 바퀴의 강한 재진입
+    else if (n === 'swell') {
+      const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = noiseBuf; s.loop = true; f.type = 'highpass'; f.frequency.setValueAtTime(1200, now); f.frequency.exponentialRampToValueAtTime(7000, now + x);
+      g.gain.setValueAtTime(.0001, now); g.gain.exponentialRampToValueAtTime(.09, now + x);
+      s.connect(f).connect(g).connect(master); s.start(now); s.stop(now + x);
+    }
+    else if (n === 'tapewarp') { tone(1400, 70, x, 'sawtooth', .05); tone(320, 40, x, 'square', .025); noise(now, .07, x, 2200, 'bandpass'); }
+    else if (n === 'reentry') { tone(160, 38, .55, 'sine', .34); noise(now, .1, .7, 5000); [262, 392, 523, 784].forEach((f, i) => tone(f, f, .35, 'square', .03, now + i * .02)); }
+    else if (n === 'powerdown') { tone(700, 90, .32, 'square', .03); noise(now + .2, .12, .03, 6000); }
     else if (n === 'ff') { tone(300, 2400, .28, 'sawtooth', .035); noise(now, .05, .3, 3000, 'bandpass'); }
     else if (n === 'drop') { noise(now, .09, .5, 4000); tone(880, 60, .3, 'square', .03); }
     else if (n === 'guard') { tone(1600, 400, .18, 'square', .045); noise(now, .08, .25, 6000); tone(330, 110, .3, 'sawtooth', .04, now + .05); }
@@ -314,12 +425,12 @@
     // fade: 게임오버 땐 곡이 1.2초 동안 서서히 사라진다
     stop(fade) {
       this.on = false; if (!bgm.active) return;
-      if (fade && bgm.gain) { bgm.gain.gain.setTargetAtTime(0, ac.currentTime, .35); setTimeout(() => { if (mode !== 'play') bgmHalt(); }, 1200); }
+      if (fade && bgm.gain) { bgm.gain.gain.setTargetAtTime(0, ac.currentTime, .35); setTimeout(() => { if (!this.on) bgmHalt(); }, 1200); }
       else bgmHalt();
     },
     tick() {
       if (bgm.active) return;
-      if (!ac || !this.on || mode !== 'play' || (S && S.rw)) { if (ac) this.next = ac.currentTime + .05; return; }
+      if (!ac || !this.on || (mode !== 'play' && mode !== 'title') || (S && (S.rw || S.warp))) { if (ac) this.next = ac.currentTime + .05; return; }
       const fever = S && S.climax > 0, st = 60 / bpm() / 2, wow = S ? Math.max(0, stage() - 1) * .004 : 0, lost = S && dropOn(), live = S && liveK() > .2 && S.liveLen - S.live >= S.liveIn;
       while (this.next < ac.currentTime + .12) {
         const i = this.step % 16, t = this.next;
@@ -346,16 +457,21 @@
     }
   };
 
-  /* ================= 입력: 스페이스바 하나로 시작·점프·재개 ================= */
+  /* ================= 입력: 타이틀은 아무 키나, 그 뒤로는 스페이스바 하나로 점프·재개 ================= */
   function press() {
     ensureAudio(); held = true;
-    if (mode === 'attract') { newGame(); return; }
-    if (mode === 'over') { if (S.overT > 45) newGame(); return; }
+    if (mode === 'title') { startGame(); return; }
+    if (mode === 'over') { if (S.overT > 45) { enterTitle(); startGame(true); } return; }
     if (mode === 'pause') { setMode('play'); return; }
+    if (S.enter && S.enter.t < ENTER_CTRL) return; // 주인공이 아직 달려 들어오는 중
     if (!S.rw) S.queued = true;
   }
   const DIRS = { ArrowUp:'up', KeyW:'up', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right' };
   addEventListener('keydown', e => {
+    if (mode === 'title' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (DIRS[e.code] || e.code === 'Space') e.preventDefault();
+      press(); held = e.code === 'Space'; return;
+    }
     const dir = DIRS[e.code];
     if (dir) { e.preventDefault(); if (mode === 'play' && S && S.pick && !S.rw && !e.repeat) choose(dir); return; }
     if (e.code !== 'Space') return;
@@ -365,7 +481,7 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
 
   /* ================= 진행 ================= */
-  const active = (o, L) => (o.lap || 1) <= L && (!o.max || L <= o.max) && (!o.tangle || L - 1 - S.purged >= 4);
+  const active = (o, L) => (o.lap || 1) <= L && (!o.max || L <= o.max) && (!o.tangle || (L - 1 - S.purged >= 4 && !S.clean));
   const wOf = o => o.w || SIZE[o.t][0];
   function eachObs(fn, ahead = 20) {
     for (const off of [0, TRACK]) {
@@ -389,25 +505,32 @@
   // 공연 세기: 라이저 동안 0→1, 끝나기 전 1→0 · 조명 색은 마디마다 넘어간다
   const liveK = () => S && S.live > 0 ? Math.min(1, (S.liveLen - S.live) / S.liveIn, S.live / LIVE_OUT) : 0;
   const LIVE_COL = [C.pink, C.teal, C.yellow, '#8f6bff'];
-  // 테이프 마모: stage = 지금 걸려 있는 디버프 단계(PURIFY로 한 단계씩 걷어낼 수 있다), wearMax = 얻은 능력 단계(걷어내도 유지)
-  const stage = () => Math.max(0, Math.min(4, S.lap - 1 - S.purged));
+  // 테이프 마모: wear = 쌓인 디버프 단계(PURIFY로 한 단계씩 걷어낼 수 있다), stage = 지금 실제로 걸리는 단계(CLEAN 동안 0),
+  // wearMax = 얻은 능력 단계(걷어내도 유지)
+  const wear = () => Math.max(0, Math.min(4, S.lap - 1 - S.purged));
+  const stage = () => S.clean > 0 ? 0 : wear();
   const wearMax = () => Math.min(4, S.lap - 1);
+  // BREAK와 과열 동안은 몸이 무겁다(2단 점프 · FF DASH 불가), OVERDRIVE 동안은 공중에서 한 번 더 뛴다
+  const heavy = () => S.climax > 0 || S.heat > 0;
+  const airMax = () => heavy() ? 1 : S.drive > 0 ? 3 : 2;
   const onBeat = () => { const f = fpb(), ph = S.beatT % f; return Math.min(ph, f - ph) <= 5; };
   // DROPOUT(4바퀴~): 약 5초마다 30프레임 지직거림으로 예고한 뒤 45프레임 동안 신호가 끊긴다
   const DROP_P = 300, DROP_PRE = 30, DROP_LEN = 45;
-  const dropPh = () => stage() < 3 || S.rw || S.loopFx || S.cam > 0 || S.live > 0 ? -1 : (S.anim + 140) % DROP_P;
+  const dropPh = () => stage() < 3 || S.rw || loopBusy() || S.cam > 0 || S.live > 0 ? -1 : (S.anim + 140) % DROP_P;
   const dropWarn = () => { const p = dropPh(); return p >= 0 && p < DROP_PRE; };
   const dropOn = () => { const p = dropPh(); return p >= DROP_PRE && p < DROP_PRE + DROP_LEN; };
   // 잔상 자리: 평소엔 뒤에서 따라오고, 신호가 끊길 땐(ECHO LEAD) 앞으로 달려 나가 지난 루프의 길을 먼저 보여준다
   // OVERDRIVE 동안엔 표지 그림처럼 바짝 붙어 겹쳐 달린다
-  const echoSlot = i => dropWarn() || dropOn() ? HX + 34 * (i + 1) : S.drive > 0 ? HX - 7 * (i + 1) : HX - 24 * (i + 1);
+  // 게이트 2단계부터는 시간이 거꾸로 흐르기 시작해, 잔상들이 뒤에서 앞으로 미끄러져 나간다
+  const echoSlot = i => gateZone() >= 2 ? HX + 22 * (i + 1) : dropWarn() || dropOn() ? HX + 34 * (i + 1) : S.drive > 0 ? HX - 7 * (i + 1) : HX - 24 * (i + 1);
   // 점프대 충전: 약 110px 앞부터 다가갈수록 0→1, 지나치면 0
   const padCharge = sx => { const d = sx - HX; return d < -19 ? 0 : Math.max(0, Math.min(1, (110 - d) / 90)); };
   // WOW(3바퀴~): 테이프가 늘어져 박자를 벗어난 점프는 낮아진다. 대신 박자에 맞추면(BEAT JUMP) 원래보다 높이 뛰고 게이지가 찬다
+  // BREAK 중엔 몸이 무거워 낮게(높이 85%), OVERDRIVE 중엔 높게(높이 120%) 뛴다
   function jump(n) {
-    const beat = wearMax() >= 2 && onBeat(), k = beat ? 1.05 : stage() >= 2 ? .94 : 1;
+    const beat = wearMax() >= 2 && onBeat(), k = (beat ? 1.05 : stage() >= 2 ? .94 : 1) * (S.climax > 0 ? BREAK_JUMP : S.drive > 0 ? OD_JUMP : 1);
     if (n === 1) { S.vy = JUMP1 * k; S.jumps = 1; sfx('jump'); }
-    else { S.vy = JUMP2 * k; S.jumps = 2; S.spin = 18; sfx('jump2'); burst(HX, S.y - 4, 8, [C.teal, C.white], 1.4); }
+    else { S.vy = JUMP2 * k; S.jumps++; S.spin = 18; sfx('jump2'); burst(HX, S.y - 4, 8, S.drive > 0 ? [C.yellow, C.white] : [C.teal, C.white], 1.4); }
     if (beat) { S.beatFx = 14; addGauge(1); sfx('beat'); }
     if (beat && liveK() > .3) { S.pts += 100; pop('CHEER +100', HX, S.y - 48, C.pink); burst(HX, S.y - 10, 10, LIVE_COL, 2); }
     S.ground = false; S.noCut = false;
@@ -421,8 +544,10 @@
     }
   }
   const pop = (text, x, y, c = C.yellow) => S.pops.push({ text, x, y, t:60, c });
+  // 능력이 켜져 있는 동안 맞으면 플레이 로그에 남긴다
+  const markHit = () => { if (S.pickLog) { S.pickLog.hit = true; savePicks(); } };
   function damage() {
-    S.hp--; S.combo = 0; S.chain = 0; S.lapHit = true;
+    S.hp--; S.combo = 0; S.chain = 0; S.lapHit = true; markHit();
     if (S.hp <= 0) { gameOver(); return false; }
     return true;
   }
@@ -437,7 +562,8 @@
   // 실수는 실수라 콤보와 PERFECT는 잃는다. 구멍은 못 막는다(잔상은 뒤에서 달리니까)
   function guard(onGuard) {
     const g = S.ghosts.shift();
-    S.guardFx = { x:g.x, t:16 };
+    S.lost.push(g); if (S.lost.length > 3) S.lost.shift(); // 흩어진 잔상은 PURIFY로 되살릴 수 있다
+    S.guardFx = { x:g.x, t:16 }; markHit();
     S.combo = 0; S.chain = 0; S.lapHit = true; S.inv = 50; S.freeze = 6; S.shake = 8; S.flash = 3;
     burst(HX, S.y - 16, 18, [C.teal, C.white, C.glow], 2.4);
     pop('ECHO GUARD', HX, S.y - 48, C.glow); sfx('guard');
@@ -484,65 +610,214 @@
     S.rw = null; S.past = []; S.hist = []; S.inv = 80; sfx('play');
     if (bgm.active) bgmPlay(beatToSong(s.beatT));
   }
+  // OVERDRIVE 중에 번 게이지는 쌓아 뒀다가 끝날 때 돌려받고, BREAK와 과열 중엔 차지 않는다. CLEAN 중엔 그대로 찬다
   function addGauge(n) {
-    if (S.climax > 0 || S.drive > 0 || S.pick) return;
+    if (S.drive > 0) { S.odBank += n; return; }
+    if (S.climax > 0 || S.heat > 0 || S.pick) return;
     S.gauge = Math.min(GAUGE, S.gauge + n);
     if (S.gauge >= GAUGE) openPick();
   }
   // 게이지가 차면: 세계가 느려지고(30%) 소리가 먹먹해지며, 주인공 둘레에 방향 키 세 개가 차례로 켜진다
   function openPick() { S.pick = { t:0, acc:0 }; S.flash = 3; sfx('pickOpen'); muffle(700, .2); }
-  const canPurify = () => stage() > 0;
+  // 마모가 있으면 걷어내고, 없으면 다음 바퀴 마모를 미리 봉인한다(한 바퀴 앞까지만)
+  const canPurify = () => S.purged < S.lap;
+  function logPick(dir) {
+    const e = { dir, lap:S.lap, wear:wear(), hp:S.hp, ghosts:S.ghosts.length, s0:score(), hit:false, died:false, gain:0, at:Date.now() };
+    picks.push(e); if (picks.length > LOG_MAX) picks.shift(); savePicks();
+    return e;
+  }
+  // 능력이 끝나면 그동안 번 점수를 로그에 적는다
+  function endPower(dir) { const e = S.pickLog; if (!e || (dir && e.dir !== dir)) return; e.gain = score() - e.s0; S.pickLog = null; savePicks(); }
   // 고른 순간: 짧게 멈칫 + 플래시 + 소리가 확 열리고, 능력이 바로 시작된다
   function choose(dir) {
     if (dir === 'up' && !canPurify()) { sfx('deny'); return; }
     S.pick = null; S.pickFx = { dir, t:48, sub:'' };
-    S.freeze = 4; S.flash = 6; S.shake = 6; sfx('choose', dir === 'up' ? 0 : dir === 'left' ? 1 : 2); muffle(20000, .45);
-    if (dir === 'left') { S.climax = CLIMAX_T; sfx('climax'); }
-    else if (dir === 'up') { S.pickFx.sub = TAPE[stage()].bad; S.purged++; S.gauge = 0; S.cleanFx = 40; S.inv = Math.max(S.inv, 40); }
-    else S.drive = DRIVE_T;
+    S.freeze = XF_STOP; S.flash = 0; S.shake = 6; S.xfIn = { dir, t:0 }; S.xfOut = null;
+    const n = dir === 'up' ? 0 : dir === 'left' ? 1 : 2; sfx('choose', n); sfx('xform', n); muffle(20000, .45);
+    endPower(); S.pickLog = logPick(dir);
+    if (dir === 'left') { S.climax = CLIMAX_T; S.smash = 0; sfx('climax'); }
+    else if (dir === 'up') purify();
+    else { S.drive = DRIVE_T; S.odBank = 0; }
   }
+  // 시간 안에 못 고르면: 아무 능력도 켜지지 않고 게이지가 조금 빠진 채 남는다
+  function skipPick() {
+    S.pick = null; S.gauge = GAUGE * PICK_KEEP; muffle(20000, .3); sfx('deny');
+    pop('NO PICK', HX, S.y - 48, C.mist);
+    const e = logPick('none'); e.gain = 0; savePicks();
+  }
+  function purify() {
+    // 화면에 있던 엉킨 장애물은 풀려 흩어진다 (마모를 걷어내기 전에 찾아야 보인다)
+    eachObs((o, sx, key) => { if (o.tangle) { S.broken.add(key); burst(sx + wOf(o) / 2, GROUND - 14, 14, [C.white, C.glow, '#8a5a3a'], 2); } });
+    const w = wear();
+    S.pickFx.sub = w > 0 ? TAPE[w].bad + ' OFF' : 'NEXT LOOP SEALED';
+    S.purged++; S.gauge = 0; S.cleanFx = 40 + XF_STOP; S.cleanW = w; S.inv = Math.max(S.inv, 40);
+    S.clean = S.cleanMax = CLEAN_T + CLEAN_PER * w;
+    if (S.lost.length && S.ghosts.length < 3) {
+      const g = S.lost.pop(); g.x = HX; g.flash = 24; S.ghosts.push(g); S.echoIn = 0;
+      pop('ECHO RESTORED', HX, S.y - 60, C.glow);
+    }
+  }
+  // CLEAN이 끝나 마모가 돌아올 때, 이미 화면 안에 있는 엉킨 장애물이 눈앞에서 갑자기 생기지 않게 한다
+  function endClean() { eachObs((o, sx, key) => { if (o.tangle) S.broken.add(key); }); endPower('up'); xfEnd('up'); }
+  // BREAK로 부술 때마다: 연속으로 부술수록 +100 × 연속 횟수(최대 ×5)
+  function smash(x, y, px, py) {
+    S.smash++; const v = 100 * Math.min(5, S.smash);
+    S.pts += v; S.shake = 6; sfx('smash');
+    burst(x, y, 12 + S.smash * 2, [C.white, C.pink, C.yellow], 2.2);
+    // BREAK 변신: 부딪힌 자리에서 큰 사각 픽셀 파편과 충격파
+    for (let i = 0; i < 8; i++) { const a = Math.random() * Math.PI * 2, v2 = 1.5 + Math.random() * 2.5; S.parts.push({ x, y, vx:Math.cos(a) * v2, vy:Math.sin(a) * v2 - 1.5, life:24 + Math.random() * 12, c:i % 2 ? C.pink : C.white, s:3 }); }
+    S.rings.push({ x, y, t:14, max:14, r:26, c:C.pink });
+    pop(S.smash > 1 ? 'SMASH x' + S.smash + ' +' + v : '+' + v, px, py, C.pink);
+  }
+  // OVERDRIVE: 넘은 장애물에 바짝 붙어 달리던 잔상들이 부딪혀 부순다 (구멍은 부술 수 없다)
+  function echoStrike(o, i, m) {
+    const sx = Math.round(o.p - S.d + HX), w = wOf(o);
+    const y = o.t === 'D' ? droneTop(o, S.lap) + 8 : o.t === 'L' ? GROUND - SIGN_GAP - 8 : GROUND - SIZE[o.t][1] / 2;
+    S.broken.add(S.lap + ':' + i); S.shake = 4; sfx('smash');
+    if (o.t === 'D') S.debris.push({ x:sx, y:y - 8, vy:-2 });
+    burst(sx + w / 2, y, 10 + m * 4, [C.yellow, C.pink, C.white], 2.4);
+  }
+  /* ---------- 변신 상태 ---------- */
+  // 지금 변신한 능력(겹치면 BREAK > OVERDRIVE > PURIFY 순으로 보인다)과 남은 프레임
+  const xfDir = () => S.climax > 0 ? 'left' : S.drive > 0 ? 'right' : S.clean > 0 ? 'up' : null;
+  const xfLeft = () => S.climax > 0 ? S.climax : S.drive > 0 ? S.drive : S.clean;
+  // 네온 세기 0~1: 끝나기 XF_OUT 전부터 줄어들며(접촉 불량처럼 가끔 깜빡) 꺼진다
+  function xfK() {
+    const left = xfLeft(); if (left >= XF_OUT) return 1;
+    return hash(S.anim * .37) < .15 ? .2 : left / XF_OUT;
+  }
+  // 능력이 끝난 순간: 다른 능력이 아직 켜져 있지 않으면 테이프가 끊기며 원래 모습으로
+  function xfEnd(dir) { if (xfDir()) return; S.xfOut = { dir, t:XF_SNAP, ph:ribbonPh(dir) }; sfx('powerdown'); burst(HX, S.y - 19, 10, [XCOL[dir], C.white], 1.2); }
+  // 매 프레임 변신 이펙트 재료: BREAK 박자 충격파 · PURIFY 원형 파동과 모여드는 픽셀 · OVERDRIVE 네온 궤적 · 과열 연기
+  function xfStep() {
+    const d = xfDir(), cy = S.y - 19;
+    if (d === 'left' && S.beatHit) S.rings.push({ x:HX, y:cy, t:16, max:16, r:34, c:C.pink });
+    if (d === 'up') {
+      if (S.anim % 45 === 0) S.rings.push({ x:HX, y:cy, t:44, max:44, r:60, c:C.white, soft:true });
+      if (S.anim % 3 === 0) S.xfp.push({ a:Math.random() * Math.PI * 2, r:26 + Math.random() * 16, life:24, c:Math.random() < .5 ? C.white : C.glow });
+    }
+    if (d === 'right' && !S.falling) S.odTrail.push({ t:S.total, y:S.y - 14 });
+    S.odTrail = S.odTrail.filter(p => S.total - p.t < HX + 20);
+    if (S.heat > 0 && S.anim % 3 === 0) S.parts.push({ x:HX - 6 + Math.random() * 12, y:S.y - 14 - Math.random() * 16, vx:-.2, vy:-.5, g:-.01, life:26, c:Math.random() < .5 ? '#5a2a30' : C.red });
+  }
+  const comboMult = () => Math.min(S.drive > 0 ? 8 : 5, 1 + Math.floor(S.combo / 8));
   function collect(x, y) {
     S.combo++;
-    const mult = Math.min(5, 1 + Math.floor(S.combo / 8));
+    const mult = comboMult();
     S.pts += 50 * mult * (S.drive > 0 ? 2 : 1);
     burst(x, y, 5, [C.yellow, C.teal], 1.1);
     sfx('pick', Math.min(10, S.combo % 10));
     addGauge(1);
   }
   function nextLap() {
+    const g = Math.min(4, S.lap - 1); // 이번 전환의 고장 단계: 1→2 바퀴 0 … 5바퀴부터 4
     S.ghosts.unshift({ rec:S.rec, x:-40, flash:0 }); if (S.ghosts.length > 3) S.ghosts.pop();
     S.echoIn = 160;
     S.rec = newRec();
     const perfect = !S.lapHit; S.lapHit = false;
-    const st0 = stage();
+    const st0 = wear();
     S.lap++;
-    if (S.lap <= 5 || stage() > st0) S.tapeCard = 240; // 새 능력이 생기거나 마모가 한 단계 오르면 라벨
+    if (S.lap <= 5 || wear() > st0) S.tapeCard = 240; // 새 능력이 생기거나 마모가 한 단계 오르면 라벨
     const keep = s => new Set([...s].filter(k => k.startsWith(S.lap + ':')));
     S.broken = keep(S.broken); S.got = keep(S.got); S.near = keep(S.near); S.fired = keep(S.fired);
-    S.loopFx = 70; S.slow = 28; S.banner = 0;
+    S.banner = 0;
     if (perfect) {
       S.pts += 1000; S.banner = 110; S.bannerWord = 'perfect';
       S.sub = S.hp < HPMAX ? 'HP +1   BONUS +1000' : 'BONUS +1000';
       if (S.hp < HPMAX) S.hp++;
-      sfx('perfect');
-    } else sfx('lap');
-    sfx('whoosh');
+      S.lapSfx = 'perfect'; // 되감기가 끝나 음악이 다시 들어올 때 울린다
+    }
     S.liveDone = false;
+    startWarp(g);
+  }
+  /* ---------- Loop Gateway ---------- */
+  // 게이트(이번 바퀴 끝)까지 남은 거리와 접근 단계 1·2·3. 통과 중·낙하 중엔 0
+  const gateDist = () => TRACK - S.d;
+  const gateZone = () => { if (!S || S.warp || S.falling || S.d < 0) return 0; const d = gateDist(); return d < GATE_AP[2] ? 3 : d < GATE_AP[1] ? 2 : d < GATE_AP[0] ? 1 : 0; };
+  // 되감기 연출이나 가운데 OSD가 떠 있는 동안은 다른 안내(PERFECT · 테이프 라벨 · ECHO 이름표)가 기다린다
+  const loopBusy = () => !!S.warp || (!!S.osd && S.osd.t < OSD_BIG);
+  // 릴 회전: 평소 앞으로 돌다가 1단계에서 느려지고 2단계부터 거꾸로, 3단계와 통과 중엔 빠르게 되감는다
+  const reelSpin = () => { const d = gateDist(); return S.warp ? -.6 : d < GATE_AP[2] ? -.3 : d < GATE_AP[1] ? -.08 : d < GATE_AP[0] ? .06 * (d - GATE_AP[1]) / (GATE_AP[0] - GATE_AP[1]) : .06; };
+  function gateStep() {
+    S.reel += reelSpin();
+    const z = gateZone();
+    if (z >= 1 && !S.gateCue) { S.gateCue = true; const sec = gateDist() / Math.max(1, speedOf()) / 60; sfx('swell', sec); bgmGhost(sec); }
+    // 2단계부터: 주변 픽셀이 세계와 반대 방향(뒤 → 앞)으로 흐른다
+    if (z >= 2 && S.anim % 2 === 0) S.parts.push({ x:Math.random() * W * .7, y:10 + Math.random() * (GROUND - 20), vx:speedOf() * .5 + 2 + Math.random() * 2, vy:0, g:.0001, life:28, c:Math.random() < .5 ? C.glow : C.white, s:1 });
+  }
+  // 게이트 통과: 세계가 멈추고, 녹화해 둔 이번 바퀴 장면이 거꾸로 빠르게 감긴다. 오디오가 순간 끊긴 뒤 테이프 감기는 소리와 함께 피치가 떨어지고, 곡도 실제로 거꾸로 감긴다
+  function startWarp(g) {
+    const len = Math.min(60, WARP_T + WARP_PER * g);
+    S.warp = { t:0, len, g, film:snaps.slice().reverse() };
+    S.cars = []; S.gateCue = false;
+    if (bgm.ghost) { try { bgm.ghost.stop(); } catch (e) {} bgm.ghost = null; }
+    audioCut(.07); sfx('tapewarp', len / 60); muffle(900, len / 60 * .8);
+    if (bgm.active) { const now = bgmTime(), rate = 3; bgm.pos = now - rate * len / 60; bgmPlay(now, true, rate); }
+  }
+  function warpStep() {
+    const w = S.warp; w.t++; S.reel += reelSpin();
+    // 4→5바퀴부터: 음악이 끊기듯 더듬는다
+    if (w.g >= 3 && cut && w.t > 5) cut.gain.setValueAtTime((w.t >> 1) % 3 === 0 ? 0 : 1, ac.currentTime);
+    if (w.t >= w.len) endWarp();
+  }
+  // 되감기가 끝나면: 음악이 강하게 다시 들어오고(신스 음악은 마디 처음부터), 화면이 안정되며 VHS OSD에 새 루프 번호가 뜬다
+  // 3→4바퀴부터는 지난 장면이 통과 뒤에도 잠깐 현재 화면에 겹쳐 남는다
+  function endWarp() {
+    const w = S.warp; S.warp = null;
+    audioOn(); muffle(20000, .05); sfx('reentry');
+    if (S.lapSfx) { sfx(S.lapSfx); S.lapSfx = null; }
+    if (bgm.active) bgmPlay(bgm.pos);
+    music.step = 0;
+    S.osd = { t:0, lap:S.lap, g:w.g };
+    S.pastFx = w.g >= 2 ? 40 : 0; S.pastFilm = w.film;
+    S.shake = 6 + w.g * 2; S.flash = 3;
+    snaps.length = 0;
+  }
+  // 녹화: 이번 바퀴의 화면을 반 해상도로 남긴다
+  const snaps = [];
+  let snapAt = -1;
+  function snapshot() {
+    if (snapAt === S.anim) return; snapAt = S.anim;
+    const c = document.createElement('canvas'); c.width = Math.round(W / 2); c.height = Math.round(H / 2);
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.drawImage(cv, 0, 0, c.width, c.height);
+    snaps.push(c); if (snaps.length > SNAP_MAX) snaps.shift();
   }
 
+  // 타이틀: 세계가 플레이 속도로 흐른다(주인공 · 충돌 없음). 게이트 한 칸만큼 지나면 그만큼 뒤로 감아도 화면은 그대로다
+  function titleStep() {
+    titleT++; idleT++; S.anim++;
+    S.beatT = bgm.active && bgm.playing ? songToBeat(bgmTime()) : S.beatT + 1;
+    const sp = speedOf(); S.prevD = S.d; S.d += sp; S.total += sp; S.reel += .06;
+    if (S.d >= -(W - HX) - 80) { S.d -= GATE_GAP; S.prevD -= GATE_GAP; }
+    if (idleT >= IDLE_T + INFO_T * 4) idleT = 0;
+  }
+  const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
   function update() {
-    if (mode === 'attract') { attractT++; attractScroll += 1.8; return; }
+    if (mode === 'title') { titleStep(); return; }
     if (mode === 'over') {
       S.overT++;
       if (S.falling > 0) stepFall();
       stepFx(0);
-      if (S.overT > 720) setMode('attract');
+      if (S.overT > 720) enterTitle();
       return;
     }
     if (mode !== 'play') return;
+    // 시작 전환: 카메라가 플레이 위치로 올라오고, 주인공이 들어와 자리를 잡는 순간 조작이 열린다
+    if (S.enter) {
+      const e = S.enter; e.t++;
+      S.cam = TITLE_CAM * (1 - ease(Math.min(1, e.t / 36))); S.camV = 0;
+      if (e.t === ENTER_CTRL) sfx('go');
+      if (e.t >= ENTER_T) { S.enter = null; S.cam = 0; }
+    }
     if (S.guardFx && --S.guardFx.t <= 0) S.guardFx = null;
     if (S.pickFx && --S.pickFx.t <= 0) S.pickFx = null;
     if (S.cleanFx > 0) S.cleanFx--;
+    // 변신 연출은 Hit Stop 동안에도 흐른다(세계만 멈춘다)
+    if (S.xfIn && ++S.xfIn.t >= XF_IN) S.xfIn = null;
+    if (S.xfOut && --S.xfOut.t <= 0) S.xfOut = null;
+    if (S.osd && ++S.osd.t >= OSD_T) S.osd = null;
+    if (S.pastFx > 0) S.pastFx--;
+    if (S.warp) { warpStep(); return; }
     if (S.freeze > 0) { S.freeze--; if (S.freeze === 0 && S.pendingRewind && !S.falling) startRewind(); return; }
     if (S.rw) {
       S.anim++;
@@ -559,7 +834,7 @@
       return;
     }
     if (S.pick) {
-      if (++S.pick.t >= PICK_T) choose('left');
+      if (++S.pick.t >= PICK_T) skipPick();
       else { S.pick.acc += PICK_SLOW; if (S.pick.acc < 1) return; S.pick.acc -= 1; }
     }
     if (S.slow > 0) { S.slow--; if (S.slow % 2) { stepFx(0); return; } }
@@ -573,15 +848,14 @@
     S.prevD = S.d; S.d += sp; S.total += sp;
     if (S.climax > 0 || S.drive > 0) S.pts += sp / 10;
     if (S.d >= TRACK) { S.d -= TRACK; S.prevD -= TRACK; S.past = []; nextLap(); }
-    if (S.intro > 0 && --S.intro === 40) sfx('go');
 
     if (S.queued) {
       S.queued = false;
       if (!S.falling) {
         if (S.ground) jump(1);
         else if (S.vy > 0 && GROUND - S.y < 14) S.buf = 8;
-        else if (S.jumps < 2) jump(2);
-        else if (wearMax() >= 4 && !S.ffUsed) ffDash();
+        else if (S.jumps < airMax()) jump(2);
+        else if (wearMax() >= 4 && !S.ffUsed && !heavy()) ffDash();
       }
     }
     if (S.buf > 0) { S.buf--; if (S.ground && !S.falling) { jump(1); S.buf = 0; } }
@@ -603,9 +877,10 @@
     if (S.d >= 0) S.rec[Math.floor(S.d / 4)] = Math.max(0, GROUND - S.y);
     S.hist.push(S.y); if (S.hist.length > 20) S.hist.shift();
     S.ghosts.forEach((g, i) => { const tx = echoSlot(i); g.x += (tx - g.x) * .09; if (g.flash) g.flash--; });
-    if (S.echoIn > 0 && !S.loopFx) S.echoIn--;
-    if (S.tapeCard > 0 && !S.loopFx && S.banner <= 0) S.tapeCard--;
+    if (S.echoIn > 0 && !loopBusy()) S.echoIn--;
+    if (S.tapeCard > 0 && !loopBusy() && S.banner <= 0) S.tapeCard--;
     if (S.beatFx > 0) S.beatFx--;
+    xfStep(); gateStep();
     if (dropPh() === DROP_PRE) sfx('drop');
 
     // 뒤에서 오는 차
@@ -625,7 +900,8 @@
       car.x += 9;
       const bx = car.x + 4, bw = 44, by = GROUND - 15;
       if (!S.falling && !S.ff && bx < hx + hw && bx + bw > hx) {
-        if (S.y > by + 2 && S.climax === 0 && S.inv === 0) { hurt(() => { burst(car.x + 26, GROUND - 9, 14, [C.white, C.red, C.gray], 2.4); car.x = W + 200; }); return; }
+        if (S.y > by + 2 && S.climax > 0 && !car.passed) { car.passed = true; smash(car.x + 26, GROUND - 9, HX, S.y - 48); car.x = W + 200; }
+        else if (S.y > by + 2 && S.climax === 0 && S.inv === 0) { hurt(() => { burst(car.x + 26, GROUND - 9, 14, [C.white, C.red, C.gray], 2.4); car.x = W + 200; }); return; }
         else if (!car.passed && S.y <= by + 2) { car.passed = true; S.pts += 150; pop('DODGE +150', HX, S.y - 48, C.teal); sfx('close'); }
       }
     }
@@ -669,10 +945,8 @@
             burst(sx + 9, b.y + 4, 12, [C.white, C.teal, C.red], 2);
             pop(S.chain > 1 ? 'STOMP x' + S.chain : 'STOMP +200', HX, S.y - 48, C.white); sfx('stomp', S.chain);
           } else if (S.climax > 0) {
-            S.broken.add(key); S.pts += 100; S.shake = 6; sfx('smash');
-            const cy = o.t === 'L' ? b.h - 8 : b.y + b.h / 2;
-            burst(b.x + b.w / 2, cy, 12, [C.white, C.pink, C.yellow], 2.2);
-            pop('+100', b.x + b.w / 2, o.t === 'L' ? b.h + 4 : b.y - 6, C.pink);
+            S.broken.add(key);
+            smash(b.x + b.w / 2, o.t === 'L' ? b.h - 8 : b.y + b.h / 2, b.x + b.w / 2, o.t === 'L' ? b.h + 4 : b.y - 6);
           } else if (S.inv === 0) { if (o.t === 'E') sfx('zap'); hurt(() => S.broken.add(key)); stop = true; }
         } else if (xo && !S.ground && o.t !== 'D' && o.t !== 'E' && !S.near.has(key)) {
           const gap = o.t === 'L' ? hy - (b.y + b.h) : b.y - S.y;
@@ -688,12 +962,15 @@
           if (o.t === 'C' || o.t === 'S' || !active(o, S.lap) || S.broken.has(S.lap + ':' + i)) return;
           const c = o.p + wOf(o) / 2;
           if (!(S.prevD < c && S.d >= c) || h < 6) return;
-          const hit = S.drive > 0 ? S.ghosts.slice() : S.ghosts.filter(g => { const e = g.rec[idx] || 0; return e > 6 && Math.abs(e - h) <= 8; });
+          // CLEAN 중엔 테이프가 깨끗해 지난 루프와 맞추기 쉽다(±8 → ±14)
+          const tol = S.clean > 0 ? 14 : 8;
+          const hit = S.drive > 0 ? S.ghosts.slice() : S.ghosts.filter(g => { const e = g.rec[idx] || 0; return e > 6 && Math.abs(e - h) <= tol; });
           if (!hit.length) return;
-          const m = hit.length;
+          const m = hit.length, strike = S.drive > 0 && o.t !== 'P';
           hit.forEach(g => { g.x = HX - 2; g.flash = 16; });
           S.pts += 100 * m * (S.drive > 0 ? 2 : 1); addGauge(1 + m);
-          pop(m > 1 ? 'SYNC x' + m : 'SYNC', HX, S.y - 48, C.glow); sfx('sync', m);
+          if (strike) echoStrike(o, i, m);
+          pop(strike ? (m > 1 ? 'ECHO STRIKE x' + m : 'ECHO STRIKE') : m > 1 ? 'SYNC x' + m : 'SYNC', HX, S.y - 48, strike ? C.yellow : C.glow); sfx('sync', m);
           burst(HX, S.y - 16, 6 + m * 3, [C.glow, C.white], 1.3);
         });
       }
@@ -710,8 +987,17 @@
         if (sx + 7 > hx && sx - 7 < hx + hw && py > hy && py - 10 < hy + hh) { S.got.add(key); collect(sx, py - 4); }
       }
     }
-    if (S.climax > 0) { S.climax--; S.gauge = GAUGE * S.climax / CLIMAX_T; if (S.climax === 0) { S.gauge = 0; S.inv = 60; } }
-    if (S.drive > 0) { S.drive--; S.gauge = GAUGE * S.drive / DRIVE_T; }
+    // BREAK가 끝나면 아주 짧은 무적 뒤 과열. OVERDRIVE가 끝나면 쌓아 둔 게이지를 1.5배로 돌려받는다. CLEAN이 끝나면 마모가 돌아온다
+    if (S.climax > 0) { S.climax--; S.gauge = GAUGE * S.climax / CLIMAX_T; if (S.climax === 0) { S.gauge = 0; S.inv = 20; S.heat = HEAT_T; endPower('left'); xfEnd('left'); } }
+    if (S.drive > 0) {
+      S.drive--; S.gauge = GAUGE * S.drive / DRIVE_T;
+      if (S.drive === 0) {
+        const n = Math.round(S.odBank * OD_BANK); S.odBank = 0; endPower('right'); xfEnd('right');
+        if (n) { pop('CHARGE +' + Math.round(Math.min(1, n / GAUGE) * 100) + '%', HX, S.y - 60, C.yellow); addGauge(n); }
+      }
+    }
+    if (S.heat > 0) S.heat--;
+    if (S.clean > 0 && --S.clean === 0) endClean();
     // IDIOTAPE LIVE: 무대 그림이 화면 오른쪽 끝에 들어오는 순간 라이저 → liveIn 뒤 드롭. 박자마다 꽃가루, 마디 첫 박엔 양옆 연주자에게서 픽셀이 터진다
     // 드롭 맞추기: 곡에 drop이 정해져 있으면 곡을 드롭 직전으로 넘기고(DJ 컷), 아니면 다음 마디 첫 박까지 라이저를 늘인다
     const liveAt = SECRET_AT - (W - HX) + 20;
@@ -732,8 +1018,7 @@
     }
     for (const k in S.springT) if (--S.springT[k] <= 0) delete S.springT[k];
     if (S.inv > 0) S.inv--;
-    if (S.banner > 0) S.banner--;
-    if (S.loopFx > 0) S.loopFx--;
+    if (S.banner > 0 && !loopBusy()) S.banner--;
     if (S.flash > 0) S.flash--;
     if (S.shake > 0) S.shake--;
     stepFx(sp);
@@ -745,6 +1030,10 @@
     S.debris = S.debris.filter(d => d.x > -30);
     for (const p of S.pops) { p.t--; p.y -= .4; }
     S.pops = S.pops.filter(p => p.t > 0);
+    for (const r of S.rings) r.t--;
+    S.rings = S.rings.filter(r => r.t > 0);
+    for (const p of S.xfp) { p.r *= .86; p.life--; }
+    S.xfp = S.xfp.filter(p => p.life > 0 && p.r > 1);
   }
 
   /* ================= 그리기 도구 ================= */
@@ -784,13 +1073,6 @@
     ctx.drawImage(s, dx + 1, Math.round(y) + 1); ctx.drawImage(c, dx, Math.round(y));
   }
   function dim(a, c = '#02060a') { ctx.globalAlpha = a; R(c, 0, 0, W, H); ctx.globalAlpha = 1; }
-  // 화면을 꽉 채우게 가운데를 잘라 그리기 (영상은 픽셀 그림이 아니라서 부드럽게 축소)
-  function cover(src, sw, sh) {
-    const s = Math.max(W / sw, H / sh), cw = W / s, ch = H / s;
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
-    ctx.imageSmoothingEnabled = false;
-  }
 
   /* ================= 배경 (월드 좌표: 0~DECK, 위로 VIEW_TOP만큼 천장이 더 보인다) ================= */
   function drawBG(s, speed, fever, anim, beat) {
@@ -818,8 +1100,9 @@
   /* ================= 고가도로 아래: 구멍 너머와 낙하 장면 ================= */
   // 아래 그림들도 터널처럼 박자에 맞춰 숨 쉰다 (BEAT 박자 순간 · BEATP 박자 안 위치 0~1 · LAMP 지금 조명 색)
   let BEAT = false, BEATP = 0, LAMP = C.teal;
-  const CABLES = [{ y:DECK + SLAB + 100, sag:10 }, { y:DECK + SLAB + 170, sag:14 }], FOG = [DECK + SLAB + 130, DECK + SLAB + 235], SIGN_X = 150;
-  const cableY = (c, x) => c.y + Math.round(c.sag * 4 * (x / W) * (1 - x / W));
+  const CABLES = [{ y:DECK + SLAB + 100, sag:10, off:0 }, { y:DECK + SLAB + 170, sag:14, off:140 }], CABLE_SPAN = 300, FOG = [DECK + SLAB + 130, DECK + SLAB + 235], SIGN_X = 150;
+  // 전선은 CABLE_SPAN마다 기둥에 걸려 늘어지고, 도로보다 느리게(0.6배) 흘러 멀리 있는 것처럼 보인다
+  const cableY = (c, x) => { const u = mod(x + S.total * .6 + c.off, CABLE_SPAN) / CABLE_SPAN; return c.y + Math.round(c.sag * 4 * u * (1 - u)); };
   function mirrorTile(img, sy, sh, dy, scroll) {
     const per = img.width * 2;
     for (let x = -mod(Math.round(scroll), per); x < W; x += per) {
@@ -867,7 +1150,7 @@
       ctx.fillStyle = g; ctx.fillRect(0, fy - 18, W, 36);
     }
     for (const c of CABLES) cable(c);
-    rewindSign(SIGN_X, cableY(CABLES[1], SIGN_X + 10) - 1);
+    if (mode !== 'title' && !S.enter) rewindSign(SIGN_X, cableY(CABLES[1], SIGN_X + 10) - 1);
     ctx.restore();
     // 상판 앞면: 도로 가장자리와 같은 색, 반사등 줄이 여기가 고가도로의 끝선이라는 걸 알려준다
     R('#1a5e77', 0, DECK, W, 1); R('#03141f', 0, DECK + 1, W, SLAB - 1);
@@ -955,13 +1238,196 @@
     ctx.save(); ctx.globalAlpha = alpha; ctx.translate(cx, cy); ctx.rotate(rot);
     ctx.drawImage(IMG.ring, -size / 2, -size / 2, size, size); ctx.restore();
   }
-  function drawGates() {
-    for (const p of [0, TRACK]) {
-      const sx = Math.round(p - S.d + HX + 16);
-      if (sx < -60 || sx > W + 60) continue;
-      ctx.globalAlpha = .16; R(C.teal, sx - 8, -VIEW_TOP, 20, GROUND + VIEW_TOP); ctx.globalAlpha = 1;
-      R(C.teal, sx, -VIEW_TOP, 4, GROUND + VIEW_TOP);
-      ringAt(sx + 2, 92, 64, S.anim / 18);
+  /* ================= Loop Gateway: TAPE RIFT ================= */
+  // 천장 마운트 · 바닥 받침 → 균열 → 양옆 자기 테이프 → 위아래 릴 순으로 그린다 (주인공보다 뒤)
+  // 바퀴가 쌓일수록(gl) 색이 번지고(1) · 균열 속 장면이 번쩍이고(2) · 테이프가 끊기고 릴이 흔들리고(3) · 게이트 자체가 찢어진다(4)
+  function drawRift(gx, gl, near) {
+    const top = GATE_TOP + 6, bot = GATE_BOT - 6, film = S.warp ? S.warp.film : snaps, tick = S.anim >> 2;
+    ctx.save(); ctx.beginPath();
+    for (let y = top; y <= bot; y += 4) ctx.lineTo(gx - RIFT_W + Math.floor(hash(y * .37 + tick * .11) * 4), y);
+    for (let y = bot; y >= top; y -= 4) ctx.lineTo(gx + RIFT_W - Math.floor(hash(y * .53 + tick * .17) * 4), y);
+    ctx.closePath(); ctx.clip();
+    R('#03141f', gx - RIFT_W, top, RIFT_W * 2, bot - top);
+    // 균열 속: 녹화된 이번 바퀴 장면이 새 장면 → 옛 장면 순으로 거꾸로 넘어간다 (주인공이 있던 자리를 가운데로)
+    if (film.length) {
+      const n = film.length, f = film[n - 1 - (Math.floor(S.anim / (S.warp ? 1 : 3)) % n)], fw = (bot - top) * W / H;
+      ctx.globalAlpha = .8; ctx.drawImage(f, gx - fw * HX / W, top, fw, bot - top);
+    }
+    ctx.globalAlpha = .22 + .2 * near; R(C.glow, gx - RIFT_W, top, RIFT_W * 2, bot - top);
+    ctx.globalAlpha = .3; for (let y = top + (S.anim % 3); y < bot; y += 3) R(C.ink, gx - RIFT_W, y, RIFT_W * 2, 1);
+    ctx.globalAlpha = .7; for (let i = 0; i < 6 + gl * 4; i++) R(C.white, gx - RIFT_W + Math.random() * RIFT_W * 2, top + Math.random() * (bot - top), 2, 1);
+    // 트래킹 띠가 아래에서 위로 감겨 올라간다(되감기)
+    ctx.globalAlpha = .55; R(C.white, gx - RIFT_W, bot - mod(S.anim * 3, bot - top), RIFT_W * 2, 2);
+    if (gl >= 2 && hash(S.anim * .41 + gx) < .08) { ctx.globalAlpha = .6; R(C.white, gx - RIFT_W, top, RIFT_W * 2, bot - top); }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  // 세로로 감긴 자기 테이프: 가까워질수록 떨리고, 3단계부터는 군데군데 끊겨 끝이 늘어진다
+  function tapeStrand(x, gl, side, near) {
+    const gap = GATE_TOP + 50 + side * 40, gapH = gl >= 3 ? 8 + gl * 3 : 0;
+    for (let y = GATE_TOP; y < GATE_BOT; y += 2) {
+      if (Math.abs(y - gap) < gapH) continue;
+      const wob = Math.round(Math.sin(y / 9 + S.anim / 5 + side) * (.5 + near * 1.5 + (gl >= 3 ? 1 : 0)));
+      R('#1a0f0a', x + wob, y, 2, 2); R('#6b4a30', x + wob + (side < 0 ? 0 : 1), y, 1, 2);
+    }
+  }
+  function reel(cx, cy, gl) {
+    if (!ok(IMG.gate)) { ringAt(cx, cy, REEL_R * 2, S.reel); return; }
+    const m = GT.reel, wob = gl >= 3 ? Math.round(Math.sin(S.anim * .7 + cy) * (gl - 2)) : 0;
+    ctx.save(); ctx.translate(cx + wob, cy); ctx.rotate(S.reel + (gl >= 4 ? Math.sin(S.anim * .9) * .4 : 0));
+    ctx.drawImage(IMG.gate, m[0], m[1], m[2], m[3], -m[2] / 2, -m[3] / 2, m[2], m[3]);
+    if (gl >= 1) {
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .18 + .06 * gl;
+      ctx.drawImage(tintPart(IMG.gate, m, C.pink), -m[2] / 2 - 1 - (gl >> 1), -m[3] / 2); ctx.drawImage(tintPart(IMG.gate, m, C.glow), -m[2] / 2 + 1 + (gl >> 1), -m[3] / 2);
+    }
+    ctx.restore();
+  }
+  function drawGateway() {
+    const ps = [TRACK, 0];
+    for (let p = -GATE_GAP; p > S.d - HX - 60; p -= GATE_GAP) ps.push(p); // 출발선 앞 구간(타이틀 · 출발 전)의 반복 게이트
+    for (const p of ps) {
+      const gx = Math.round(p - S.d + HX);
+      if (gx < -60 || gx > W + 60) continue;
+      const gl = p === TRACK ? Math.min(4, S.lap - 1) : Math.max(0, Math.min(4, S.lap - 2)), near = p === TRACK ? Math.max(0, 1 - gateDist() / GATE_AP[0]) : 0;
+      // 다가갈수록 균열 둘레가 청록으로 번진다
+      ctx.globalAlpha = .06 + .14 * near; R(C.teal, gx - 30, -VIEW_TOP, 60, GROUND + VIEW_TOP); ctx.globalAlpha = 1;
+      if (ok(IMG.gate)) {
+        pix(IMG.gate, GT.mount, gx - 28, GATE_TOP - 80);
+        pix(IMG.gate, GT.base, gx - 36, GATE_BOT - 25);
+      }
+      drawRift(gx, gl, near);
+      tapeStrand(gx - REEL_R, gl, -1, near); tapeStrand(gx + REEL_R - 2, gl, 1, near);
+      reel(gx, GATE_TOP, gl); reel(gx, GATE_BOT, gl);
+      // 4단계: 게이트 자체가 가로로 찢어지고 가끔 색이 뒤집힌다
+      if (gl >= 4 && ok(IMG.gate)) {
+        for (let i = 0; i < 3; i++) {
+          const y = Math.floor(hash(S.anim * .13 + i * 7) * (GATE_BOT - GATE_TOP)) + GATE_TOP - 20, dx = Math.round((hash(S.anim * .29 + i) - .5) * 10);
+          pix(IMG.gate, [GT.mount[0], 70, GT.mount[2], 4], gx - 28 + dx, y);
+        }
+        if (hash(S.anim * .07 + gx) < .06) { ctx.globalCompositeOperation = 'difference'; R(C.white, gx - 40, -VIEW_TOP, 80, GROUND + VIEW_TOP); ctx.globalCompositeOperation = 'source-over'; }
+      }
+    }
+  }
+  /* ---------- 깨진 CRT 자막 ---------- */
+  // 세계가 고장 나며 새어 나오는 시스템 메시지: 같은 자리에 몇 프레임 머물다 사라지고, 가로 띠로만 보이며 색이 갈라진다 (UI가 아니라 화면의 고장)
+  function glitchText(n, seed, big, words = GLITCH) {
+    for (let i = 0; i < n; i++) {
+      const r = k => hash(seed * 7.13 + i * 31.7 + k * 3.1);
+      let w = words[Math.floor(r(1) * words.length)];
+      if (w === 'LOOP_') w += String(S.lap).padStart(2, '0');
+      const size = big && r(2) < .35 ? 16 : 8, x = Math.round(12 + r(3) * (W - 130)), y = Math.round(18 + r(4) * (H - 56));
+      ctx.font = `700 ${size}px ${F_PIX}`; const tw = Math.ceil(ctx.measureText(w).width);
+      const band = Math.max(3, Math.floor((.35 + r(5) * .65) * (size + 2))), by = y - 1 + Math.floor(r(6) * (size + 3 - band));
+      ctx.save(); ctx.beginPath(); ctx.rect(x - 4, by, tw + 8, band); ctx.clip();
+      ctx.globalAlpha = .6; R(C.ink, x - 3, y - 2, tw + 6, size + 4);
+      ctx.globalAlpha = .95; txt(w, x - 1 - (size >> 3), y, C.pink, size, 'left', null); txt(w, x + 1 + (size >> 3), y, C.glow, size, 'left', null); txt(w, x, y, C.white, size, 'left', null);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 화면 기준 캔버스 띠 밀기 (y·h 논리 좌표, dx 논리 px)
+  function shiftBand(y, h, dx, x = 0, w = W) {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const sx = Math.round(x * SX), sy = Math.round(y * SY), sw = Math.round(w * SX), sh = Math.max(1, Math.round(h * SY));
+    ctx.drawImage(cv, sx, sy, sw, sh, sx + Math.round(dx * SX), sy, sw, sh); ctx.restore();
+  }
+  // 게이트 접근(화면 기준): 1단계 게이트 쪽이 살짝 출렁 · 3단계 RGB 분리가 커지고, 화면 일부가 1~2프레임씩 과거 장면으로 깜빡이며 자막이 새기 시작
+  function drawGateFx(cam) {
+    const z = gateZone(); if (!z || mode !== 'play') return;
+    const gx = Math.round(TRACK - S.d + HX), gl = Math.min(4, S.lap - 1), near = Math.max(0, 1 - gateDist() / GATE_AP[0]);
+    for (let i = 0; i < 2 + z; i++) { const y = Math.floor(hash(S.anim * .21 + i * 5) * (H - 10)); shiftBand(y, 3 + z, Math.round(Math.sin(S.anim * .5 + i) * (1 + near * 2)), Math.max(0, gx - 60), 120); }
+    if (z < 3) return;
+    const amp = 1 + gl * .7;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .14 + .05 * gl;
+    ctx.drawImage(cv, Math.round(amp * SX), 0); ctx.restore();
+    if (snaps.length && S.anim % 5 < 2) {
+      const sd = Math.floor(S.anim / 5), f = snaps[Math.floor(hash(sd) * snaps.length)];
+      const w = 80 + Math.floor(hash(sd + .3) * 140), h = 30 + Math.floor(hash(sd + .6) * 60), x = Math.floor(hash(sd + .9) * (W - w)), y = Math.floor(hash(sd + 1.2) * (H - h));
+      ctx.globalAlpha = .55; ctx.drawImage(f, x / 2, y / 2, w / 2, h / 2, x, y, w, h); ctx.globalAlpha = 1;
+    }
+    glitchText(1 + (gl >> 1), Math.floor(S.anim / 3), false);
+  }
+  /* ---------- 통과: 시간 되감기 ---------- */
+  // 카메라: 순간 줌 아웃(0.88) → 되감는 동안 천천히 → 끝에 빠르게 줌 인(1.08 → 1)
+  function warpZoom() {
+    if (!S.warp) return 1;
+    const p = S.warp.t / S.warp.len;
+    return p < .2 ? 1 - .12 * p / .2 : p < .82 ? .88 + .04 * (p - .2) / .62 : 1.08 - .08 * (p - .82) / .18;
+  }
+  function drawWarp(hero, cam) {
+    const w = S.warp, p = w.t / w.len, g = w.g, film = w.film, n = film.length, z = warpZoom();
+    const shake = g >= 3 ? 2 + g : 1;
+    ctx.save();
+    ctx.translate(Math.round((Math.random() - .5) * shake), Math.round((Math.random() - .5) * shake));
+    ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
+    // 화면이 가로로 늘어나며 녹화된 장면들이 거꾸로 빠르게 넘어간다. 3→4바퀴부터는 지나간 장면과 지금 화면이 겹쳐 보인다
+    if (p < .82 && n) {
+      const q = Math.min(1, p / .82), k = Math.min(n - 1, Math.floor(q * n)), st = 1 + .16 * Math.sin(q * Math.PI);
+      ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(st, 1 / (1 + (st - 1) * .5)); ctx.translate(-W / 2, -H / 2);
+      ctx.globalAlpha = Math.min(1, p * 14) * (g >= 2 ? .7 : 1); ctx.drawImage(film[k], 0, 0, W, H);
+      if (k + 1 < n) { ctx.globalAlpha = .35; ctx.drawImage(film[k + 1], -8, 0, W, H); }
+      ctx.restore();
+    }
+    ctx.globalAlpha = .16; R('#0b2a33', -20, -20, W + 40, H + 40);
+    // 파티클이 거꾸로 흐른다(오른쪽으로)
+    for (let i = 0; i < 30; i++) { const len = 6 + (i % 4) * 5; ctx.globalAlpha = .35 + (i % 3) * .15; R(i % 3 ? C.glow : C.white, mod(i * 53 + w.t * (8 + (i % 5) * 3), W + 40) - 20, (i * 37) % H, len, 1); }
+    // 주인공: 잔상이 앞쪽에서 몸으로 거꾸로 겹쳐 들어온다
+    ctx.save(); ctx.translate(0, VIEW_TOP - cam);
+    if (TINT) for (let i = 4; i >= 1; i--) { ctx.globalAlpha = .45 - i * .08; heroFrame(TINT[i % 2 ? C.teal : C.white], hero.f, HX + i * 10 * (1 - p), hero.y); }
+    ctx.globalAlpha = 1; if (hero.xf) xfBody(hero.f, hero.y, hero.xf); else heroFrame(IMG.hero, hero.f, HX, hero.y);
+    ctx.restore();
+    ctx.restore(); ctx.globalAlpha = 1;
+    // VHS: 스캔라인 폭주 · 트래킹 에러 띠 · 위아래 가장자리가 테이프처럼 말림 · RGB 분리
+    for (let i = 0; i < 10 + g * 6; i++) { ctx.globalAlpha = .2 + Math.random() * .2; R(C.white, 0, Math.random() * H, W, 1); }
+    ctx.globalAlpha = 1;
+    const ty = mod(w.t * 11, H + 30) - 15;
+    shiftBand(ty, 14 + g * 4, (Math.random() * 2 - 1) * (6 + g * 3));
+    for (let r = 0; r < 5; r++) { const c = (5 - r) * (5 - r) * .5 * Math.sin(w.t * .6 + r); shiftBand(H - 6 * (r + 1), 6, c); shiftBand(6 * r, 6, -c); }
+    ctx.globalAlpha = .5; R(C.ink, 0, H - 4, W, 4); R(C.ink, 0, 0, W, 3); ctx.globalAlpha = 1;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3 + .05 * g;
+    ctx.drawImage(cv, Math.round((2 + g * 1.5) * SX), 0); ctx.restore();
+    // 5바퀴 이후: 시간 시스템 붕괴 — 색 반전 · 화면 찢김
+    if (g >= 4) {
+      if (w.t % 7 === 0) { ctx.globalCompositeOperation = 'difference'; R(C.white, 0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+      for (let i = 0; i < 3; i++) shiftBand(Math.random() * H, 8 + Math.random() * 24, (Math.random() * 2 - 1) * 24);
+    }
+    glitchText(2 + g * 2, Math.floor(w.t / 2), true);
+    // 첫 프레임 플래시 → 끝에선 화면이 꺼지며 00:00:00:00
+    if (w.t < 2) { ctx.globalAlpha = .8; R(C.white, 0, 0, W, H); }
+    if (p >= .82) {
+      ctx.globalAlpha = .85 * (1 - (p - .82) / .18); R('#02060a', 0, 0, W, H);
+      ctx.globalAlpha = 1; if ((w.t >> 1) % 2 === 0) num('00:00:00:00', W / 2, H / 2 - 8, C.white, 16, 'center');
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 3→4바퀴부터: 통과 뒤에도 지나간 장면이 지금 화면 위에 반투명으로 잠깐 남는다
+  function drawPastFx() {
+    const f = S.pastFilm; if (!S.pastFx || !f || !f.length) return;
+    ctx.globalAlpha = .28 * S.pastFx / 40; ctx.drawImage(f[Math.floor(hash(S.pastFx >> 2) * f.length)], 0, 0, W, H); ctx.globalAlpha = 1;
+  }
+  /* ---------- 루프 번호 OSD ---------- */
+  // 되감기가 끝나고 화면이 안정되는 순간 VHS 화면 표시처럼: 가운데 크게(▶ PLAY · LOOP // 03 · 타임코드 · REC ●) → 오른쪽 아래로 작아져 잠시 남는다
+  // 타임코드는 새 루프 시작부터 실제로 흐르고, 시간이 많이 고장 난 뒤(g 4)엔 숫자가 깨진다
+  const tc = t => '00:00:' + String(Math.floor(t / 60) % 60).padStart(2, '0') + ':' + String(Math.floor(t / 2) % 30).padStart(2, '0');
+  const playTri = (x, y, c) => { for (let i = 0; i < 7; i++) R(c, x, y + i, Math.min(i, 6 - i) + 1, 1); };
+  function drawOSD() {
+    const o = S.osd; if (!o || mode !== 'play') return;
+    const lap = String(o.lap).padStart(2, '0'), bad = o.g >= 4 && hash(o.t * .7) < .3;
+    const L = 'LOOP // ' + (bad ? lap[0] + String.fromCharCode(48 + Math.floor(hash(o.t) * 10)) : lap), T = bad ? tc(Math.floor(hash(o.t * 1.3) * 99999)) : tc(o.t);
+    const rec = (o.t >> 4) % 2 === 0;
+    if (o.t < OSD_BIG) {
+      const open = Math.min(1, o.t / 6), close = o.t > OSD_BIG - 8 ? (OSD_BIG - o.t) / 8 : 1, jit = o.t < 8 || (o.g >= 3 && hash(o.t * .3) < .12) ? Math.round((hash(o.t) - .5) * 8) : 0;
+      const x0 = Math.round(W / 2 - 80) + jit, y0 = Math.round(H / 2 - 40), cy = y0 + 24;
+      ctx.save(); ctx.translate(0, cy); ctx.scale(1, Math.max(.05, open * close)); ctx.translate(0, -cy);
+      if (o.t < 16 || (o.t >> 3) % 2 === 0) { playTri(x0, y0 + 1, C.white); txt('PLAY', x0 + 11, y0, C.white, 8, 'left'); }
+      num(L, x0 - 1, y0 + 14, C.pink, 16); num(L, x0 + 1, y0 + 14, C.glow, 16); num(L, x0, y0 + 14, C.white, 16);
+      num(T, x0, y0 + 38, C.white, 8);
+      if (rec) { R(C.red, x0 + 126, y0 + 38, 6, 6); txt('REC', x0 + 136, y0 + 37, C.white, 8, 'left'); }
+      ctx.restore();
+    } else {
+      ctx.globalAlpha = Math.min(1, (OSD_T - o.t) / 20);
+      num(L.replace(/ /g, ''), W - 8, H - 30, C.white, 8, 'right'); num(T, W - 8, H - 18, C.mist, 8, 'right');
+      if (rec) R(C.red, W - 88, H - 30, 5, 5);
+      ctx.globalAlpha = 1;
     }
   }
   // 벽의 IDIOTAPE 무대 그림: 설명 없이 그냥 벽에 걸려 있다가, 공연이 시작되면 테두리가 박자마다 조명 색으로 번쩍인다
@@ -1196,7 +1662,7 @@
       heroFrame(TINT[C.teal], f, g.x, GROUND - hgt);
       if (g.flash) { ctx.globalAlpha = g.flash / 16 * .8; heroFrame(TINT[C.white], f, g.x, GROUND - hgt); }
       // 새로 합류한 잔상에 잠깐 이름표
-      if (i === 0 && S.echoIn > 0 && !S.loopFx) { ctx.globalAlpha = Math.min(1, S.echoIn / 30); txt('ECHO', g.x, GROUND - hgt - 50, C.glow, 8, 'center'); }
+      if (i === 0 && S.echoIn > 0 && !loopBusy()) { ctx.globalAlpha = Math.min(1, S.echoIn / 30); txt('ECHO', g.x, GROUND - hgt - 50, C.glow, 8, 'center'); }
     });
     ctx.globalAlpha = 1;
   }
@@ -1206,6 +1672,125 @@
     const k = Math.min(1, (16 - g.t) / 5), x = g.x + (HX - g.x) * k;
     ctx.globalAlpha = .85 * g.t / 16; heroFrame(TINT[C.white], 6, x, S.y);
     ringAt(HX, S.y - 19, 18 + (16 - g.t) * 5, (16 - g.t) / 4, g.t / 16 * .9);
+    ctx.globalAlpha = 1;
+  }
+  /* ================= 변신 (TAPE-RUNNER) ================= */
+  // 자기 테이프 띠: 몸 둘레 기운 타원 궤도를 도는 검은 띠. back = 몸 뒤로 지나가는 반쪽(몸보다 먼저 그린다)
+  // cut(0~1) = 끊긴 정도: 두 조각이 반대로 날아가며 처진다
+  const ribbonPh = d => S.anim * (d === 'right' ? .22 : d === 'left' ? .16 : .08);
+  const ribbonR = it => it < 10 ? 46 - it * 2.4 : 22 + Math.sin(S.anim / 9) * 1.5;
+  function tapeRibbon(cx, cy, r, ph, back, a, col, cut = 0) {
+    for (let i = 0; i < 44; i++) {
+      const t = ph + i / 44 * Math.PI * 1.75, sn = Math.sin(t);
+      if ((sn < 0) !== back) continue;
+      const side = i < 22 ? -1 : 1;
+      const x = cx + Math.cos(t) * r + side * cut * 18, y = cy + sn * r * .3 - Math.cos(t) * r * .22 + side * cut * 6 + cut * cut * 16;
+      ctx.globalAlpha = a; R('#1a0f0a', x, y, 2, 2); R('#6b4a30', x, y, 2, 1);
+      if (i % 9 === (S.anim >> 1) % 9) R(col, x, y, 2, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawRings() {
+    for (const r of S.rings) {
+      const k = r.t / r.max, rad = 4 + r.r * (1 - k);
+      if (r.soft) { ctx.globalAlpha = .35 * k; ctx.strokeStyle = r.c; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(r.x, r.y, rad, rad * .85, 0, 0, Math.PI * 2); ctx.stroke(); continue; }
+      ctx.globalAlpha = .9 * k;
+      for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; R(i % 4 ? r.c : C.white, r.x + Math.cos(a) * rad, r.y + Math.sin(a) * rad * .85, 2, 2); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // OVERDRIVE 네온 궤적: 지나간 자리에 노란 선이 남아 세계와 함께 뒤로 흘러간다(능력이 끝나도 화면 밖으로 나갈 때까지)
+  function drawOdTrail() {
+    const T = S.odTrail;
+    for (let i = 0; i < T.length; i++) {
+      const p = T[i], x = HX - (S.total - p.t), nx = i + 1 < T.length ? HX - (S.total - T[i + 1].t) : x + 1;
+      ctx.globalAlpha = .85 * (1 - (S.total - p.t) / (HX + 20)); R(C.yellow, x, p.y, Math.max(1, Math.ceil(nx - x)), 1);
+      if (i % 3 === 0) { ctx.globalAlpha *= .5; R(C.white, x, p.y - 1, 1, 1); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 몸 뒤: 충격파 · 궤적 · 테이프 뒤쪽 반 · 방향마다 다른 잔상 (끝나 갈수록 잔상 간격이 좁아져 몸으로 합쳐진다)
+  // ← 크고 거칠게 떨리는 붉은 잔상 · → 길고 빠른 잔상과 앞쪽에 순간 겹치는 에코 · ↑ 몸을 감싸는 흰 빛
+  function drawXfBack(o) {
+    drawOdTrail(); drawRings();
+    const d = o.xf, it = S.xfIn ? S.xfIn.t : 99; if (!d || !TINT || it < 4) return;
+    const k = xfK(), cy = o.y - 19, hy = i => o.hist && o.hist.length ? o.hist[Math.max(0, o.hist.length - 1 - i * 3)] : o.y;
+    tapeRibbon(HX, cy, ribbonR(it), ribbonPh(d), true, 1, XCOL[d]);
+    if (d === 'left') for (let i = 3; i >= 1; i--) { ctx.globalAlpha = (.42 - i * .1) * k; heroFrame(TINT[i % 2 ? C.pink : C.red], o.f, HX - i * 11 * k + Math.round(Math.random() * 2 - 1), hy(i), 1 + .08 * i * k); }
+    else if (d === 'right') {
+      for (let i = 6; i >= 1; i--) { ctx.globalAlpha = (.5 - i * .07) * k; heroFrame(TINT[i % 2 ? C.yellow : C.white], o.f, HX - i * 9 * k, hy(i)); }
+      if (S.anim % 26 < 3 && k === 1) { ctx.globalAlpha = .35; heroFrame(TINT[C.yellow], o.f, HX + 10, o.y); ctx.globalAlpha = .18; heroFrame(TINT[C.yellow], o.f, HX + 20, o.y); }
+    } else if (XTINT) { ctx.globalAlpha = .22 * k; for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) heroFrame(XTINT.body, o.f, HX + ox, o.y + oy); }
+    ctx.globalAlpha = 1;
+  }
+  // 변신한 몸: 변신 순간엔 하얀 실루엣 → 변신 그림 위로 흰빛이 빠지며 드러난다. 네온은 박자에 숨 쉬고, 끝나 갈 땐 아래부터 꺼진다
+  // OVERDRIVE는 가끔 2프레임씩 앞으로 튀어 프레임이 건너뛴 듯 보인다(판정은 그대로)
+  function xfBody(f, y, d) {
+    const it = S.xfIn ? S.xfIn.t : 99, x = HX + (d === 'right' && S.anim % 26 < 2 ? 3 : 0);
+    if (!XTINT || !TINT) { heroFrame(IMG.hero, f, x, y); return; }
+    if (it < 4) { heroFrame(TINT[C.white], f, x, y); return; }
+    const k = xfK(), neon = XTINT[XCOL[d]], dx = Math.round(x - 18), dy = Math.round(y - CH), rows = Math.ceil(CH * k);
+    if (k < 1) heroFrame(IMG.hero, f, x, y);
+    ctx.globalAlpha = k; heroFrame(IMG.hero_x, f, x, y);
+    if (rows > 0) {
+      ctx.globalAlpha = BEAT ? 1 : .85; ctx.drawImage(neon, f * CW, 0, CW, rows, dx, dy, CW, rows);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (BEAT ? .45 : .28) * k;
+      for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) ctx.drawImage(neon, f * CW, 0, CW, rows, dx + ox, dy + oy, CW, rows);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (it < 10) { ctx.globalAlpha = (10 - it) / 6; heroFrame(XTINT.body, f, x, y); }
+    ctx.globalAlpha = 1;
+  }
+  // 몸 앞: 테이프 앞쪽 반 · 변신 순간 궤도에서 모여드는 픽셀과 RGB 분리 · PURIFY의 모여드는 픽셀 · 해제 때 끊겨 날아가는 테이프
+  function drawXfFront(o) {
+    const d = o.xf, it = S.xfIn ? S.xfIn.t : 99, cy = o.y - 19;
+    if (d) {
+      tapeRibbon(HX, cy, ribbonR(it), ribbonPh(d), false, it < 4 ? it / 4 : 1, XCOL[d]);
+      if (it < 12) for (let i = 0; i < 18; i++) {
+        const a = i / 18 * Math.PI * 2 + it * .06, rr = 42 * (1 - it / 12);
+        ctx.globalAlpha = 1 - it / 14; R(i % 3 ? XCOL[d] : C.white, HX + Math.cos(a) * rr, cy + Math.sin(a) * rr * .8, 2, 2);
+      }
+      if (it >= 4 && it < 14 && TINT) {
+        const k = 1 - (it - 4) / 10, sp = Math.round(4 * k);
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .55 * k;
+        heroFrame(TINT[C.pink], o.f, HX - sp, o.y); heroFrame(TINT[C.teal], o.f, HX + sp, o.y);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      for (const p of S.xfp) { ctx.globalAlpha = Math.min(1, p.life / 10); R(p.c, HX + Math.cos(p.a) * p.r, cy + Math.sin(p.a) * p.r * .8, 1, 1); }
+    }
+    if (S.xfOut) {
+      const p = 1 - S.xfOut.t / XF_SNAP, c = XCOL[S.xfOut.dir];
+      tapeRibbon(HX, cy, 22, S.xfOut.ph, true, 1 - p, c, p); tapeRibbon(HX, cy, 22, S.xfOut.ph, false, 1 - p, c, p);
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 - p * 2, rr = 26 * (1 - p); ctx.globalAlpha = 1 - p * .8; R(i % 2 ? c : C.white, HX + Math.cos(a) * rr, cy + Math.sin(a) * rr * .8, 1, 1); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  // 변신 순간의 카메라: Hit Stop 동안 주인공 쪽으로 확 당겨졌다가(1.1배) 능력이 시작되며 풀린다
+  function xfZoom() {
+    const t = S.xfIn ? S.xfIn.t : -1; if (t < 0) return 1;
+    return t < 4 ? 1 + .1 * t / 4 : t < XF_STOP ? 1.1 : 1 + .1 * Math.pow(1 - (t - XF_STOP) / (XF_IN - XF_STOP), 2);
+  }
+  // 화면 기준 이펙트: BREAK 몸 주변 가로 찢김 · OVERDRIVE 위아래 가장자리 속도선 · 변신 순간 플래시(흰색 → 능력 색)
+  function drawXfScreen(cam) {
+    const d = xfDir(), it = S.xfIn ? S.xfIn.t : 99, hy = Math.round(S.y + VIEW_TOP - cam);
+    if (mode !== 'play') return;
+    if (d === 'left' && it >= XF_STOP && (S.anim >> 1) % 3 === 0) {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (let i = 0; i < 2; i++) {
+        const by = hy - 40 + Math.floor(Math.random() * 40), bh = 2 + Math.floor(Math.random() * 4), dx = (Math.random() < .5 ? -1 : 1) * (2 + Math.floor(Math.random() * 3));
+        const sx = Math.round((HX - 30) * SX), sy = Math.round(by * SY), sw = Math.round(64 * SX), sh = Math.round(bh * SY);
+        ctx.drawImage(cv, sx, sy, sw, sh, sx + Math.round(dx * SX), sy, sw, sh);
+      }
+      ctx.restore();
+    }
+    if (d === 'right') {
+      const k = xfK();
+      for (let i = 0; i < 14; i++) {
+        const len = 24 + (i * 13) % 40, y = i % 2 === 0 ? 3 + (i * 7) % 26 : H - 4 - (i * 7) % 26, x = W - mod(S.anim * (9 + (i % 4) * 2) + i * 67, W + len);
+        ctx.globalAlpha = (.25 + (i % 3) * .12) * k; R(i % 4 ? C.yellow : C.white, x, y, len, 1);
+      }
+    }
+    if (S.xfIn && it >= 4 && it < 9) { ctx.globalAlpha = .5 * (1 - (it - 4) / 5); R(it < 6 ? C.white : XCOL[S.xfIn.dir], 0, 0, W, H); }
     ctx.globalAlpha = 1;
   }
   function drawHero(o) {
@@ -1219,16 +1804,9 @@
       heroFrame(IMG.hero, f, HX, y); ctx.restore();
       return;
     }
-    // 몸 뒤 색 잔상은 BREAK(무지개 · 무적)와 OVERDRIVE(노랑·분홍 · 가속) 표시로만 쓴다. 평소 청록 실루엣은 '지난 루프의 나'만 뜻한다
-    const trail = fever ? FEVER : o.drive ? [C.yellow, C.pink, C.white] : null;
-    const col = i => trail ? trail[(i + (anim >> 2)) % 3] : C.teal;
-    if (TINT && trail) {
-      for (let i = 4; i >= 1; i--) {
-        const hy = hist && hist.length ? hist[Math.max(0, hist.length - 1 - i * 3)] : y;
-        ctx.globalAlpha = .5 - i * .08;
-        heroFrame(TINT[col(i)], f, HX - i * 8, hy);
-      }
-    }
+    // 몸 뒤 색 잔상은 변신(drawXfBack)이 맡는다. 평소 청록 실루엣은 '지난 루프의 나'만 뜻한다
+    const trail = !!o.xf;
+    const col = i => trail ? (i % 2 ? XCOL[o.xf] : XACC[o.xf]) : C.teal;
     // FF DASH: 하얀 빨리감기 자국이 길게 끌리고 앞에 ▶▶ (청록 실루엣 = 잔상과 섞이지 않게 흰색)
     if (S && S.ff > 0 && TINT) {
       for (let i = 3; i >= 1; i--) { ctx.globalAlpha = .5 - i * .12; heroFrame(TINT[C.white], f, HX - i * 12, y); }
@@ -1239,10 +1817,13 @@
     ctx.globalAlpha = trail ? .7 : .45;
     for (let k = 0; k < lines; k++) {
       const len = 10 + ((anim * 7 + k * 23) % 26);
-      R(col(k), HX - 20 - len - ((anim * 3 + k * 17) % 22), y - 6 - ((k * 9 + (anim >> 1)) % 26), len, 1);
+      const off = (anim * 3 + k * 17) % 22, ly = y - 6 - ((k * 9 + (anim >> 1)) % 26);
+      // 게이트 2단계부터는 속도선이 앞에서 뒤가 아니라 뒤에서 앞으로(시간이 거꾸로) 흐른다
+      if (gateZone() >= 2) R(col(k), HX + 18 + off, ly, len, 1); else R(col(k), HX - 20 - len - off, ly, len, 1);
     }
     ctx.globalAlpha = 1;
-    if (!blink) heroFrame(IMG.hero, f, HX, y);
+    if (o.xf) xfBody(f, y, o.xf);
+    else if (!blink) heroFrame(IMG.hero, f, HX, y);
   }
   const heroPose = () => (S.falling > 0 || !S.ground) ? (S.spin > 0 ? 7 : 6) : runFrame(S.anim, speedOf());
 
@@ -1259,14 +1840,18 @@
   }
   function drawHUD() {
     const fever = S.climax > 0, fcol = fever ? FEVER[(S.anim >> 2) % 3] : S.drive > 0 ? C.yellow : S.pick ? ((S.pick.t >> 2) % 2 ? C.white : C.yellow) : null;
+    // 게이지 이름표: 지금 켜진 능력(과열 · CLEAN 포함)을 보여준다. CLEAN은 남은 시간을 옆에 하얀 막대로
+    const label = S.pick ? 'CHOOSE' : fever ? 'BREAK' : S.drive > 0 ? 'OVERDRIVE' : S.heat > 0 ? 'OVERHEAT' : S.clean > 0 ? 'CLEAN' : 'CLIMAX';
+    const lcol = fcol || (S.heat > 0 ? ((S.anim >> 2) % 2 ? C.red : C.pink) : S.clean > 0 ? C.white : C.mist);
     hi(IMG.hud, HU.portrait, 6, 6);
     bar('bar5', SLOT5, 33, 8, S.hp / HPMAX, S.hp <= 1 && (S.anim >> 3) % 2 ? C.red : null);
     txt('HP', 34, 21, C.mist, 8, 'left', null);
-    const mult = Math.min(5, 1 + Math.floor(S.combo / 8));
-    if (mult > 1) num('x' + mult, 80, 10, C.yellow, 8);
+    const mult = comboMult();
+    if (mult > 1) num('x' + mult, 80, 10, mult > 5 ? C.pink : C.yellow, 8);
     hi(IMG.hud, HU.arm, 6, H - 30);
     bar('bar10', SLOT9, 33, H - 21, S.gauge / GAUGE, fcol);
-    txt(S.pick ? 'CHOOSE' : S.drive > 0 ? 'OVERDRIVE' : 'CLIMAX', 34, H - 31, fcol || C.mist, 8, 'left', null);
+    txt(label, 34, H - 31, lcol, 8, 'left', null);
+    if (S.clean > 0 && !S.pick) { const lw = Math.ceil(ctx.measureText(label).width); R(C.white, 34 + lw + 4, H - 28, Math.ceil(36 * S.clean / S.cleanMax), 2); }
     const rx = W - 32, ry = 4, prog = Math.max(0, Math.min(1, S.d / TRACK));
     hi(IMG.hud, HU.ring0, rx, ry);
     if (ok(IMG.hud)) {
@@ -1278,7 +1863,6 @@
     num(String(score()).padStart(7, '0'), W - 8, ry + 30, C.white, 8, 'right');
   }
 
-  /* ================= 대기 화면: 표지 그림 + 뒷면 특징 목록 형식 ================= */
   /* ================= CLIMAX 선택 ================= */
   // 선택 UI: 주인공 둘레에 카세트 데크 버튼 세 개가 차례로 깜빡이며 켜진다(↑ PURIFY · ← BREAK · → OVERDRIVE). 둘레 링이 남은 시간
   const KEY_AT = { up:[0, -46], left:[-44, 0], right:[44, 0] };
@@ -1333,20 +1917,28 @@
     txt(p.name, -2, 0, C.pink, 24, 'center', null); txt(p.name, 2, 0, C.glow, 24, 'center', null); txt(p.name, 0, 0, p.col, 24, 'center');
     ctx.restore();
     ktxt(p.k, W / 2, ny + 30, C.paper, 11, 'center', 700);
-    if (f.sub) txt(f.sub + ' OFF', W / 2, ny + 48, C.mist, 8, 'center');
+    if (f.sub) txt(f.sub, W / 2, ny + 48, C.mist, 8, 'center');
     ctx.globalAlpha = 1;
   }
-  // PURIFY: 테이프 헤드를 닦듯 밝은 줄이 왼쪽에서 오른쪽으로 화면을 훑는다
-  function drawCleanFx() {
+  // PURIFY: 화면의 노이즈가 캐릭터 주변부터 원형으로 걷힌다. 걷어낸 마모만큼의 노이즈를 원 밖에만 다시 그리고, 원의 가장자리가 하얗게 번진다
+  // Hit Stop 동안(처음 XF_STOP)은 원이 아직 열리지 않는다
+  function drawCleanFx(cam) {
     if (!S.cleanFx) return;
-    const x = Math.round((1 - S.cleanFx / 40) * (W + 24)) - 12;
-    ctx.globalAlpha = .12; R(C.glow, 0, 0, x, H); ctx.globalAlpha = .45; R(C.white, x - 8, 0, 8, H); ctx.globalAlpha = 1; R(C.white, x, 0, 2, H);
+    const t = Math.max(0, 40 - S.cleanFx), r = t * t * .45 + t * 4, fade = Math.min(1, S.cleanFx / 40), cx = HX, cy = Math.round(S.y + VIEW_TOP - cam) - 19;
+    ctx.globalAlpha = .35;
+    for (let i = 0; i < 120 + S.cleanW * 60; i++) { const x = Math.random() * W, y = Math.random() * H; if (Math.hypot(x - cx, (y - cy) * 1.2) > r) R(Math.random() < .5 ? C.white : C.mist, x, y, 1 + (Math.random() * 2 | 0), 1); }
+    if (r > 0) {
+      ctx.beginPath(); ctx.ellipse(cx, cy, r, r / 1.2, 0, 0, Math.PI * 2);
+      ctx.globalAlpha = .1 * fade; ctx.fillStyle = C.glow; ctx.fill();
+      ctx.globalAlpha = .75 * fade; ctx.strokeStyle = C.white; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
   // ▲▼ 작은 픽셀 삼각형 (테이프 마모 표·라벨)
   const tri = (x, y, up, c) => { for (let r = 0; r < 4; r++) R(c, x + (up ? 3 - r : r), y + r, (up ? r : 3 - r) * 2 + 1, 1); };
   // 새 마모 단계가 시작되면 위쪽에 카세트 라벨처럼: 무엇이 닳았고(▼) 무엇을 얻었는지(▲)
   function drawTapeCard() {
-    const t = TAPE[stage()], g = TAPE[wearMax()]; if (!g || S.tapeCard <= 0 || S.loopFx || S.banner > 0 || mode !== 'play') return;
+    const t = TAPE[wear()], g = TAPE[wearMax()]; if (!g || S.tapeCard <= 0 || loopBusy() || S.banner > 0 || mode !== 'play') return;
     const w = 272, x = Math.round(W / 2 - w / 2), y = 34;
     ctx.globalAlpha = Math.min(1, S.tapeCard / 20, (240 - S.tapeCard) / 12);
     R(C.ink, x + 2, y + 2, w, 46); R(C.ink, x - 1, y - 1, w + 2, 48); R('#0a1c26', x, y, w, 46); R(C.teal, x, y, w, 2);
@@ -1363,56 +1955,90 @@
     if (icon) icon(x + 300, y + 10);
   }
   function dotted(x0, y) { for (let x = x0 - 4; x < x0 + 361; x += 4) R('#1d4a52', x, y, 2, 1); }
-  function renderAttract() {
-    BEAT = false;
-    const page = Math.floor(attractT / 480) % 5;
-    playTitle(page === 0);
-    if (page === 0) {
-      if (titleVideo.readyState >= 2) cover(titleVideo, titleVideo.videoWidth, titleVideo.videoHeight);
-      else if (ok(IMG.title)) cover(IMG.title, IMG.title.width, IMG.title.height); else R(C.night, 0, 0, W, H);
-      const g = ctx.createLinearGradient(0, H - 136, 0, H); g.addColorStop(0, 'rgba(2,6,10,0)'); g.addColorStop(1, 'rgba(2,6,10,.92)');
-      ctx.fillStyle = g; ctx.fillRect(0, H - 136, W, 136);
-      let x = 10; x += chip('RUNNER', x, 10, C.teal) + 8; chip('1 PLAYER', x, 10, C.white);
-      if (ok(IMG.logo)) ctx.drawImage(IMG.logo, W / 2 - 160, H - 108, 320, 67);
-      txt('IDT-TOLD-S1-KOR', W - 8, H - 12, C.mist, 8, 'right', null);
-      if ((attractT >> 5) % 2 === 0) txt('PRESS START', W / 2, H - 26, C.paper, 8, 'center');
-    } else {
-      ctx.save(); ctx.translate(0, VIEW_TOP); drawBG(attractScroll, 2.6, false, attractT, false); ctx.restore();
-      dim(.88);
-      const oy = (H - DECK) / 2;
-      if (page === 1 || page === 2) {
-        word('how', W / 2, 10 + oy);
-        const list = page === 1
-          ? [['01', K.t1, K.d1, (x, y) => TINT && heroFrame(TINT[C.teal], 6, x, y + 18)], ['02', K.t2, K.d2, (x, y) => signboard(x - 18, y + 8, 36, y - 16, 3, false, attractT)],
-             ['03', K.t3, K.d3, (x, y) => hz('drone', x - 10, y - 4)], ['04', K.t4, K.d4, (x, y) => pix(IMG.haz, HZ.sign, x - 6, y - 8)]]
-          : [['05', K.t5, K.d5, (x, y) => pix(IMG.haz, HZ.gate, x - 18, y - 12, 37, 24)], ['06', K.t6, K.d6, (x, y) => ringAt(x, y + 2, 26, attractT / 20)], ['07', K.t7, K.d7, (x, y) => hz('cas', x - 8, y - 2)],
-             ['08', K.t8, K.d8, (x, y) => { if (!TINT) return; ctx.globalAlpha = .3; heroFrame(TINT[C.teal], 1, x - 16, y + 18); ctx.globalAlpha = .55; heroFrame(TINT[C.teal], 1, x - 5, y + 18); ctx.globalAlpha = 1; heroFrame(IMG.hero, 1, x + 7, y + 18); }]];
-        const dense = list.length > 3, step = dense ? 40 : 50, lx = Math.round(W / 2 - 178);
-        list.forEach(([nn, t, d, ic], i) => { const y = (dense ? 46 : 56) + oy + i * step; feature(nn, t, d, lx, y, ic); if (i < list.length - 1) dotted(lx, y + (dense ? 33 : 40)); });
-        if (page === 1) txt('SPACE = JUMP', W / 2, 206 + oy, '#3c6a74', 8, 'center', null);
-        else txt('ARROW KEYS = CLIMAX CHOICE', W / 2, 206 + oy, '#3c6a74', 8, 'center', null);
-      } else if (page === 3) {
-        // 테이프 마모 표: 바퀴마다 무엇이 닳고(▼) 무엇이 생기는지(▲)
-        txt('TAPE WEAR', W / 2, 12 + oy, C.teal, 16, 'center');
-        ktxt(K.tw, W / 2, 34 + oy, C.mist, 11, 'center', 700);
-        const lx = Math.round(W / 2 - 178);
-        for (let i = 1; i <= 4; i++) {
-          const t = TAPE[i], y = 58 + oy + (i - 1) * 42;
-          chip(i < 4 ? 'LOOP ' + (i + 1) : 'LOOP 5+', lx, y + 6, C.teal);
-          tri(lx + 70, y + 3, false, C.pink); txt(t.bad, lx + 80, y + 1, C.pink, 8, 'left', null); ktxt(t.badK, lx + 150, y - 1, C.paper, 11, 'left', 700);
-          tri(lx + 70, y + 19, true, C.glow); txt(t.good, lx + 80, y + 17, C.glow, 8, 'left', null); ktxt(t.goodK, lx + 150, y + 15, C.white, 11, 'left', 700);
-          if (i < 4) dotted(lx, y + 36);
-        }
-      } else {
-        // PRESS START 위 빈 공간의 가운데에 기록 묶음을 둔다
-        const by = Math.round((H - 35) / 2) - 35;
-        txt('BEST SCORE', W / 2, by, C.teal, 16, 'center');
-        num(String(best).padStart(7, '0'), W / 2, by + 32, C.white, 16, 'center');
-        txt('BEST LOOP ' + bestLoop, W / 2, by + 62, C.mist, 8, 'center');
-      }
-      for (let i = 0; i < 5; i++) R(i === page ? C.teal : '#173544', 10 + i * 8, H - 12, 5, 5);
-      if ((attractT >> 5) % 2 === 0) txt('PRESS START', W / 2, H - 26, C.paper, 8, 'center');
+  /* ================= 타이틀 ================= */
+  // 화면 위엔 로고와 PRESS ANY KEY만. 로고 뒤에만 아주 옅은 타원 어둠과 그림자를 깔아(박스 없이) 흐르는 배경이 그대로 보이면서도 읽힌다
+  // 평소엔 조용하다: 6~9초에 한 번 로고가 몇 프레임 살짝 찢어지며 색이 갈라지거나 밝기가 흔들리고, PRESS ANY KEY는 박자에 맞춰 밝기만 숨 쉰다
+  function drawLogo(a, t) {
+    const lg = IMG.logo; if (!ok(lg) || a <= 0) return;
+    const w = Math.round(W * LOGO_W), h = Math.round(w * lg.height / lg.width), x = Math.round(W / 2 - w / 2), y = Math.round(H * .3 - h / 2), cy = y + h / 2;
+    const g = ctx.createRadialGradient(W / 2, cy, 0, W / 2, cy, w * .62); g.addColorStop(0, `rgba(2,6,10,${(.6 * a).toFixed(3)})`); g.addColorStop(1, 'rgba(2,6,10,0)');
+    ctx.save(); ctx.translate(W / 2, cy); ctx.scale(1, .4); ctx.translate(-W / 2, -cy); ctx.fillStyle = g; ctx.fillRect(0, cy - w * .62, W, w * 1.24); ctx.restore();
+    // 시작해서 사라지는 중엔 글리치 없이 조용히 빠진다
+    const cyc = t % 480, gl = mode === 'title' && cyc > 470 - Math.floor(hash(Math.floor(t / 480)) * 90) && cyc <= 474 - Math.floor(hash(Math.floor(t / 480)) * 90), flick = mode === 'title' && (cyc === 233 || cyc === 235);
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.globalAlpha = .7 * a; ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.ink), x + 1, y + 2, w, h);
+    if ('filter' in ctx) { ctx.filter = 'blur(3px)'; ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = LOGO_GLOW * a; ctx.drawImage(lg, x, y, w, h); ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; }
+    ctx.globalAlpha = a * (flick ? .55 : 1); ctx.drawImage(lg, x, y, w, h);
+    if (gl) {
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5 * a;
+      ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.pink), x - 2, y, w, h); ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.glow), x + 2, y, w, h);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
+      for (let i = 0; i < 2; i++) { const sy = Math.floor(hash(t * .7 + i) * lg.height * .8), sh = Math.floor(lg.height * (.08 + hash(t + i) * .1)); ctx.drawImage(lg, 0, sy, lg.width, sh, x + (i ? 3 : -3), y + sy * h / lg.height, w, sh * h / lg.height); }
     }
+    ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 1;
+  }
+  function drawPressKey(a, t) {
+    if (a <= 0) return;
+    const f = fpb(), k = 1 - (S.beatT % f) / f, y = H - 34;
+    ctx.globalAlpha = a * (.5 + .4 * k * k); txt('PRESS ANY KEY', W / 2, y, C.paper, 8, 'center');
+    if (hash(Math.floor(t / 2) * .37) < .02) { ctx.globalAlpha = .5 * a; txt('PRESS ANY KEY', W / 2 - 1, y, C.pink, 8, 'center', null); txt('PRESS ANY KEY', W / 2 + 1, y, C.glow, 8, 'center', null); }
+    ctx.globalAlpha = 1;
+  }
+  // 방치하면 같은 배경 위에 설명 · 테이프 마모 표 · 기록이 한 장씩 (원래 대기 화면의 그 페이지들)
+  function drawInfo(page) {
+    const oy = (H - DECK) / 2;
+    if (page === 1 || page === 2) {
+      word('how', W / 2, 10 + oy);
+      const list = page === 1
+        ? [['01', K.t1, K.d1, (x, y) => TINT && heroFrame(TINT[C.teal], 6, x, y + 18)], ['02', K.t2, K.d2, (x, y) => signboard(x - 18, y + 8, 36, y - 16, 3, false, titleT)],
+           ['03', K.t3, K.d3, (x, y) => hz('drone', x - 10, y - 4)], ['04', K.t4, K.d4, (x, y) => pix(IMG.haz, HZ.sign, x - 6, y - 8)]]
+        : [['05', K.t5, K.d5, (x, y) => pix(IMG.haz, HZ.gate, x - 18, y - 12, 37, 24)], ['06', K.t6, K.d6, (x, y) => ringAt(x, y + 2, 26, titleT / 20)], ['07', K.t7, K.d7, (x, y) => hz('cas', x - 8, y - 2)],
+           ['08', K.t8, K.d8, (x, y) => { if (!TINT) return; ctx.globalAlpha = .3; heroFrame(TINT[C.teal], 1, x - 16, y + 18); ctx.globalAlpha = .55; heroFrame(TINT[C.teal], 1, x - 5, y + 18); ctx.globalAlpha = 1; heroFrame(IMG.hero, 1, x + 7, y + 18); }]];
+      const step = 40, lx = Math.round(W / 2 - 178);
+      list.forEach(([nn, t, d, ic], i) => { const y = 46 + oy + i * step; feature(nn, t, d, lx, y, ic); if (i < list.length - 1) dotted(lx, y + 33); });
+      txt(page === 1 ? 'SPACE = JUMP' : 'ARROW KEYS = CLIMAX CHOICE', W / 2, 206 + oy, '#3c6a74', 8, 'center', null);
+    } else if (page === 3) {
+      // 테이프 마모 표: 바퀴마다 무엇이 닳고(▼) 무엇이 생기는지(▲)
+      txt('TAPE WEAR', W / 2, 12 + oy, C.teal, 16, 'center');
+      ktxt(K.tw, W / 2, 34 + oy, C.mist, 11, 'center', 700);
+      const lx = Math.round(W / 2 - 178);
+      for (let i = 1; i <= 4; i++) {
+        const t = TAPE[i], y = 58 + oy + (i - 1) * 42;
+        chip(i < 4 ? 'LOOP ' + (i + 1) : 'LOOP 5+', lx, y + 6, C.teal);
+        tri(lx + 70, y + 3, false, C.pink); txt(t.bad, lx + 80, y + 1, C.pink, 8, 'left', null); ktxt(t.badK, lx + 150, y - 1, C.paper, 11, 'left', 700);
+        tri(lx + 70, y + 19, true, C.glow); txt(t.good, lx + 80, y + 17, C.glow, 8, 'left', null); ktxt(t.goodK, lx + 150, y + 15, C.white, 11, 'left', 700);
+        if (i < 4) dotted(lx, y + 36);
+      }
+    } else {
+      const by = Math.round((H - 35) / 2) - 35;
+      txt('BEST SCORE', W / 2, by, C.teal, 16, 'center');
+      num(String(best).padStart(7, '0'), W / 2, by + 32, C.white, 16, 'center');
+      txt('BEST LOOP ' + bestLoop, W / 2, by + 62, C.mist, 8, 'center');
+      const r = pickRate(), pc = v => Math.round(v * 100) + '%';
+      if (r) txt('BREAK ' + pc(r.left) + '   PURIFY ' + pc(r.up) + '   OVERDRIVE ' + pc(r.right), W / 2, by + 86, '#3c6a74', 8, 'center', null);
+    }
+  }
+  // 타이틀 위에 얹는 것 전부: 아주 약한 CRT 그레인 · 로고(또는 방치 중엔 설명 페이지) · PRESS ANY KEY. a = 전체 세기(시작하면 빠르게 사라진다)
+  function drawTitleUI(a) {
+    ctx.globalAlpha = .06 * a; for (let i = 0; i < 40; i++) R(Math.random() < .5 ? C.white : C.mist, Math.random() * W, Math.random() * H, 1, 1); ctx.globalAlpha = 1;
+    const it = idleT - IDLE_T, info = mode === 'title' && it >= 0 ? Math.min(1, it / 20, (INFO_T * 4 - it) / 20) : 0;
+    if (info > 0) {
+      dim(.84 * info);
+      if (info >= 1) drawInfo(1 + Math.floor(it / INFO_T));
+    }
+    drawLogo(a * (1 - info), titleT);
+    drawPressKey(a, titleT);
+  }
+  // HUD를 서서히 켤 때: 다른 캔버스에 그려 한 번에 투명도를 입힌다
+  const hudCv = document.createElement('canvas'), hudCtx = hudCv.getContext('2d');
+  function drawHudLayer(a) {
+    if (a >= 1) { drawHUD(); return; }
+    if (a <= 0) return;
+    if (hudCv.width !== cv.width || hudCv.height !== cv.height) { hudCv.width = cv.width; hudCv.height = cv.height; }
+    const main = ctx; ctx = hudCtx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, hudCv.width, hudCv.height); ctx.setTransform(SX, 0, 0, SY, 0, 0); ctx.imageSmoothingEnabled = false;
+    drawHUD(); ctx = main;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = a; ctx.drawImage(hudCv, 0, 0); ctx.restore();
   }
 
   /* ================= 화면 그리기 ================= */
@@ -1422,39 +2048,34 @@
     ctx.globalAlpha = .7;
     for (let i = 0; i < 3; i++) { const y = (S.anim * 13 + i * 90) % H; R('#cfeee9', Math.random() * 40, y, W, 2); }
     ctx.globalAlpha = 1;
-    if ((S.anim >> 3) % 2 === 0) { chip('<< REWIND', W / 2 - 34, 40, C.white); }
-  }
-  function drawLoopFx() {
-    const t = 1 - S.loopFx / 70, size = 60 + t * 520, a = Math.max(0, 1 - t * 1.1);
-    ringAt(W / 2, H / 2 - 10, size, t * 6, a);
-    if (TINT && t < .7) {
-      for (let i = 0; i < 8; i++) {
-        const ang = t * 7 + i * Math.PI / 4, r = size * .36;
-        ctx.globalAlpha = a * .8; heroFrame(TINT[C.teal], (i + (S.anim >> 2)) % 6, W / 2 + Math.cos(ang) * r, H / 2 + 8 + Math.sin(ang) * r * .8, .7);
-      }
-      ctx.globalAlpha = 1;
-    }
-    if (S.loopFx > 18) { word('loop', W / 2 - 16, H / 2 - 42); num(String(S.lap), W / 2 + 46, H / 2 - 34, C.white, 16, 'center'); }
+    glitchText(2, Math.floor(S.anim / 3), false, GLITCH_HIT);
   }
   function render() {
     ctx.setTransform(SX, 0, 0, SY, 0, 0); ctx.imageSmoothingEnabled = false;
-    if (mode === 'attract') { renderAttract(); return; }
-    playTitle(false);
-    const fever = S.climax > 0, beat = (S.beatT % fpb()) < 4, cam = Math.round(S.cam);
+    R(C.night, 0, 0, W, H); // 카메라가 줌 아웃되면(게이트 통과) 세계가 화면을 다 덮지 못하니, 가장자리에 지난 프레임이 남지 않게 먼저 지운다
+    const title = mode === 'title', fever = S.climax > 0, beat = (S.beatT % fpb()) < 4, cam = Math.round(S.cam);
     BEAT = beat && !S.rw; BEATP = (S.beatT % fpb()) / fpb(); LAMP = fever ? FEVER[(S.anim >> 3) % 3] : C.teal;
     const pits = []; eachObs((o, sx) => { if (o.t === 'P') pits.push([sx, wOf(o)]); });
     ctx.save();
+    const z = xfZoom() * warpZoom();
+    if (z !== 1) { const zy = Math.round(S.y + VIEW_TOP - cam) - 19; ctx.translate(HX, zy); ctx.scale(z, z); ctx.translate(-HX, -zy); }
     if (S.shake > 0) ctx.translate(Math.round((Math.random() - .5) * 5), Math.round((Math.random() - .5) * 4));
     else if (liveK() > .3 && S.beatT % fpb() < 2) ctx.translate(Math.round(Math.random() * 2 - 1), Math.round(Math.random() * 2 - 1));
     ctx.translate(0, VIEW_TOP - cam);
     drawBG(S.total, S.falling || cam ? 0 : speedOf(), fever, S.anim, beat && !S.rw);
     drawLiveBack();
     drawUnderDeck(pits);
-    drawSecret(); drawLiveHolo(); drawGates(); drawWorldObjects(); drawDropout();
+    drawSecret(); drawLiveHolo(); drawGateway(); drawWorldObjects(); drawDropout();
     if (S.pick && !S.rw) { ctx.globalAlpha = .4; R('#02060a', 0, cam - VIEW_TOP, W, H); ctx.globalAlpha = 1; }
     drawGhosts(); drawGuardFx(); drawBeatGuide();
-    const hero = { y:S.y, f:heroPose(), hist:S.rw ? null : S.hist, speed:speedOf(), anim:S.anim, blink:S.inv > 0 && !fever && (S.inv >> 2) % 2 === 1, fever, drive:S.drive > 0 };
-    if (S.falling > 0 || S.y > GROUND) {
+    const xf = S.falling > 0 || S.y > GROUND ? null : xfDir();
+    const hero = { y:S.y, f:heroPose(), hist:S.rw ? null : S.hist, speed:speedOf(), anim:S.anim, blink:S.inv > 0 && !fever && !xf && (S.inv >> 2) % 2 === 1, fever, drive:S.drive > 0, xf };
+    // 시작 전환: 주인공이 화면 왼쪽 밖에서 제자리로 달려 들어온다 (타이틀엔 주인공이 없다)
+    const enterX = S.enter ? -(HX + 40) * (1 - ease(Math.max(0, Math.min(1, (S.enter.t - 10) / 24)))) : 0;
+    ctx.save(); ctx.translate(Math.round(enterX), 0);
+    if (!title) drawXfBack(hero);
+    if (title) { /* 타이틀: 세계만 흐른다 */ }
+    else if (S.falling > 0 || S.y > GROUND) {
       // 도로 위 + 구멍 안 + 상판 아래에서만 보인다 (도로 단면 속으로 파묻혀 보이지 않게)
       ctx.save(); ctx.beginPath(); ctx.rect(0, -H, W, GROUND + H);
       for (const [px, pw] of pits) ctx.rect(px, GROUND, pw, DECK + SLAB - GROUND);
@@ -1462,28 +2083,31 @@
       drawHero({ ...hero, blink:false, hist:null, fall:true }); ctx.restore();
     }
     else drawHero(hero);
-    drawCars();
-    for (const p of S.parts) R(p.c, p.x, p.y, 2, 2);
+    if (!title) drawXfFront(hero);
     ctx.restore();
+    drawCars();
+    for (const p of S.parts) R(p.c, p.x, p.y, p.s || 2, p.s || 2);
+    ctx.restore();
+    drawXfScreen(cam);
+    if (mode === 'play' && !S.warp && !S.rw && S.anim % SNAP_EVERY === 0) snapshot();
     drawFallFx();
-    drawTapeNoise(); drawTangle(); drawLiveFront();
+    drawTapeNoise(); drawTangle(); drawLiveFront(); drawGateFx(cam); drawPastFx();
+    if (S.warp) drawWarp(hero, cam);
     if (mode === 'play' && dropOn() && (S.anim >> 3) % 2) txt('NO SIGNAL', W / 2, 40, C.white, 8, 'center');
-    if (S.slow > 0 && !S.loopFx) { ctx.globalAlpha = .12; R(C.white, 0, 0, W, H); ctx.globalAlpha = 1; }
-    if (S.loopFx > 0) drawLoopFx();
+    if (S.slow > 0 && !loopBusy()) { ctx.globalAlpha = .12; R(C.white, 0, 0, W, H); ctx.globalAlpha = 1; }
     if (S.rw) drawRewindFx();
-    drawHUD();
+    if (!title) drawHudLayer(S.enter ? (S.enter.t - 24) / 20 : 1);
     drawTapeCard();
-    drawCleanFx();
+    drawOSD();
+    drawCleanFx(cam);
     drawPick();
     for (const p of S.pops) txt(p.text, p.x, p.y + VIEW_TOP - cam, p.c, 8, 'center');
-    if (fever) { const c = FEVER[(S.anim >> 2) % 3]; R(c, 0, 0, W, 2); R(c, 0, H - 2, W, 2); R(c, 0, 0, 2, H); R(c, W - 2, 0, 2, H); }
-    if (S.drive > 0) { const c = (S.anim >> 2) % 2 ? C.yellow : C.pink; R(c, 0, 0, W, 2); R(c, 0, H - 2, W, 2); }
     if (S.flash > 0) { ctx.globalAlpha = S.flash / 10 * .6; R(C.white, 0, 0, W, H); ctx.globalAlpha = 1; }
     if (mode === 'play') drawPickFx();
+    if (title) drawTitleUI(1);
+    else if (S.enter && S.enter.t < 18) drawTitleUI(1 - S.enter.t / 18);
     if (mode === 'play') {
-      if (S.intro > 40) { if ((S.intro >> 3) % 2) word('ready', W / 2, H / 2 - 44); }
-      else if (S.intro > 0) word('go', W / 2, H / 2 - 44);
-      else if (S.banner > 0 && !S.loopFx) {
+      if (S.banner > 0 && !loopBusy()) {
         if (S.bannerWord) word(S.bannerWord, W / 2, H / 2 - 52);
         if ((S.banner >> 3) % 2 === 0) txt(S.sub, W / 2, H / 2 - 4, C.white, 8, 'center');
       }
@@ -1511,7 +2135,7 @@
     render();
     requestAnimationFrame(frame);
   }
-  const go = () => { makeTints(); KCACHE.clear(); requestAnimationFrame(t => { last = t; frame(t); }); };
+  const go = () => { makeTints(); KCACHE.clear(); enterTitle(); requestAnimationFrame(t => { last = t; frame(t); }); };
   const fontsReady = document.fonts && document.fonts.load
     ? Promise.all([document.fonts.load('700 8px Silkscreen'), document.fonts.load('8px "Press Start 2P"'), document.fonts.load('900 12px "Noto Sans KR"', Object.values(K).join('')), document.fonts.load('700 12px "Noto Sans KR"', Object.values(K).join(''))])
     : Promise.resolve();
