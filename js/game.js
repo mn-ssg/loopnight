@@ -57,7 +57,7 @@
   const playTitle = on => { if (on && titleVideo.paused) titleVideo.play().catch(() => {}); else if (!on && !titleVideo.paused) titleVideo.pause(); };
   const HZ = { drone:[0,0,19,16], bar:[21,0,25,22], crate:[48,0,27,38], block:[77,0,27,14], spring:[106,0,19,12], gate:[127,0,73,48], sign:[202,0,13,18], car:[217,0,52,18], broken:[271,0,18,9], cas:[291,0,16,10] };
   const HU = { portrait:[0,0,51,48], bar10:[53,0,151,22], seg:[206,0,42,14], ring0:[250,0,52,50], ring1:[304,0,51,50], arm:[357,0,48,48], bar5:[407,0,82,22] };
-  const WD = { press:[0,0,123,30], ready:[125,0,114,40], go:[241,0,78,40], over:[321,0,148,40], climax:[471,0,146,46], perfect:[619,0,107,36], record:[728,0,120,32], how:[850,0,112,30], loop:[964,0,82,36] };
+  const WD = { press:[0,0,123,30], ready:[125,0,114,40], go:[241,0,78,40], over:[321,0,148,40], climax:[471,0,146,46], perfect:[619,0,107,36], how:[850,0,112,30], loop:[964,0,82,36] };
   // signs.png: 위험물 스프라이트·배경·표지를 참고로 Higgsfield에서 뽑은 간판과 점프대
   // o = 네온만 꺼진 같은 그림(깜빡임용) · n = 네온 픽셀만 남긴 흰 마스크(색 번짐·반짝임을 네온에만 입히려고)
   const SG = { low64:[0,0,64,23], low64o:[65,0,64,23], low50:[130,0,50,18], low50o:[181,0,50,18], low36:[232,0,36,13], low36o:[269,0,36,13],
@@ -1497,7 +1497,7 @@
         txt('SCORE', W / 2 - 60, cy - 32, C.mist, 8); num(String(score()).padStart(7, '0'), W / 2 + 70, cy - 32, C.white, 8, 'right');
         txt('BEST', W / 2 - 60, cy - 16, C.mist, 8); num(String(best).padStart(7, '0'), W / 2 + 70, cy - 16, C.white, 8, 'right');
         txt('LOOP', W / 2 - 60, cy, C.mist, 8); num(String(S.lap), W / 2 + 70, cy, C.white, 8, 'right');
-        if (newRecord && (S.overT >> 4) % 2 === 0) word('record', W / 2, cy + 24);
+        if (newRecord) txt('NEW RECORD', W / 2, cy + 32, C.teal, 8, 'center');
         if (S.overT > 45 && (S.overT >> 5) % 2 === 0) txt('PRESS START', W / 2, cy + 80, C.paper, 8, 'center');
       }
     }
