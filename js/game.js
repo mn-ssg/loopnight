@@ -120,23 +120,71 @@
   /* ================= 코스 ================= */
   // B 바리케이드 · W 블록 · T 상자 · P 구멍 · D 드론 · E 전기 게이트 · S 스프링 · L 낮은 간판 · C 뒤에서 오는 차 / lap 등장 바퀴, max 마지막 바퀴, m 움직이는 드론 바퀴, w 폭
   // 낮은 간판: 판 아래가 바닥에서 SIGN_GAP 높이. 톡(약 0.13초 이하) 눌러 낮게 뛰면 통과, 꾹 눌러 높게 뛰면 머리가 부딪힌다
+  // 뒤차는 이미 뛰어야 하는 장애물 위를 지나가게 둔다(620 → 바리케이드 880 · 1035 → 상자 쌍 · 2120 → 바리케이드 2380) — 속도가 바뀌어도 지나는 자리가 드론 밑 같은 틈에 걸리지 않게
+  // 6바퀴부터는 속도 대신 '아까 본 구간의 의미'가 바뀐다: 6바퀴 드론 구간 끝에 뒤차 + 엉킨 상자 쌍 · 하늘 길(OVERDRIVE) / 7바퀴 DROPOUT 복귀 / 8바퀴 두 번째 바리케이드 위에 간판(낮게 톡)
   const OBS = [
     {p:200,t:'B'},{p:360,t:'D'},{p:500,t:'S'},{p:720,t:'P'},{p:880,t:'B'},{p:950,t:'B',lap:2},
     {p:1060,t:'D'},{p:1120,t:'D'},{p:1270,t:'T'},{p:1420,t:'E'},{p:1610,t:'P'},{p:1740,t:'D',m:3},
     {p:1880,t:'W'},{p:1915,t:'B',lap:3},{p:2020,t:'S'},{p:2080,t:'P',w:64},{p:2240,t:'E',lap:2},
     {p:2380,t:'B'},{p:2500,t:'D',lap:2},
-    {p:985,t:'L',w:50,max:1},{p:1862,t:'L',w:50},{p:706,t:'L',w:64,lap:2},
-    {p:620,t:'C',lap:2},{p:1320,t:'C',lap:3},{p:2120,t:'C',lap:4},{p:960,t:'C',lap:5},
+    {p:985,t:'L',w:50,max:1},{p:1862,t:'L',w:50},{p:706,t:'L',w:64,lap:2},{p:944,t:'L',w:36,lap:8},
+    {p:620,t:'C',lap:2},{p:1320,t:'C',lap:3},{p:2120,t:'C',lap:4},{p:1035,t:'C',lap:5},
     // tangle: 5바퀴부터 테이프가 엉켜 바로 뒤에 한 번 더 찍힌 복제. 진짜로 부딪히고, FF DASH로 끊을 수 있다
     {p:246,t:'B',lap:5,tangle:1},{p:1322,t:'T',lap:5,tangle:1},{p:2426,t:'B',lap:5,tangle:1}
   ];
   const SIZE = { B:[25,22], W:[27,14], T:[27,38], P:[36,0], D:[19,16], E:[73,48], S:[19,12], L:[50,0], C:[0,0] };
   const PICK = [];
   const arc = (c, peak, n = 5, gap = 15) => { const h = (n - 1) / 2; for (let i = -h; i <= h; i++) PICK.push({ p:c + i * gap, h:Math.round(peak * (1 - (i * i) / ((h + 1) * (h + 1)))) + 6 }); };
-  // 카세트 줄은 공중에 떠 있어서 점프해야 먹는다 (h 24는 짧게 톡, 40은 꾹)
-  const row = (s, n = 5, h = 40) => { for (let i = 0; i < n; i++) PICK.push({ p:s + i * 15, h }); };
+  // 카세트 줄은 공중에 떠 있어서 점프해야 먹는다 (h 24는 짧게 톡, 40은 꾹). lap: 그 바퀴부터 나타난다
+  const row = (s, n = 5, h = 40, lap = 1) => { for (let i = 0; i < n; i++) PICK.push({ p:s + i * 15, h, lap }); };
   arc(212, 48); arc(600, 118, 7, 18); row(790); arc(892, 48); arc(1180, 84, 3);
   arc(1284, 64); row(1500); arc(1628, 48); row(1790, 5, 24); arc(2112, 104, 7, 16); arc(2392, 48); row(2440);
+  // 하늘 길(6바퀴~): 전기 게이트 위 높은 줄. 2단 점프로는 안 닿고 OVERDRIVE의 3단 점프로만 — 능력을 고르면 새 길이 열린다
+  row(1404, 5, 140, 6);
+
+  /* ================= 바퀴별 난이도: 난이도 숫자는 전부 여기서만 조정한다 ================= */
+  // 바퀴가 오를수록 확실히 어려워지되, 한 바퀴에 새 요소는 한두 개만 — 속도 · 디버프 · 장애물 · 화면 효과가 한꺼번에 곱해져 오르지 않게
+  // 1 이해한다 · 2 조금 빨라졌다 · 3 능력을 써야겠다 · 4 집중해야 한다 · 5 미쳐가기 시작한다(새 패턴 · 연출 위주, 수치는 조금만) · 6+ 시스템을 쓰면 더 간다
+  // speed     기본 달리기 속도(px/프레임, 3 = 100%)
+  // debuffs   이 바퀴의 테이프 마모(약한 것 → 센 것). 바퀴를 넘을 때마다 한 칸씩 차오르고 PURIFY는 맨 뒤(가장 센 것)부터 걷는다. 동시에 MAX_DEBUFF개까지
+  //           4바퀴에서 NOISE가 DROPOUT으로 굳고, 5바퀴는 HEAD CLEAN(VHS 자동 헤드 청소)이 DROPOUT을 걷어 새 마모(TANGLE)와 IDIOTAPE에 집중하게 한다
+  // drop      DROPOUT [주기, 끊김 길이](프레임) · wow WOW 동안 박자 밖 점프 높이 배율 · carWarn 뒤차 ! 경고(프레임)
+  // power     능력 지속시간 배율(BREAK · OVERDRIVE · CLEAN, 과열은 그만큼 짧아진다) — 후반일수록 능력도 같이 자란다
+  // gauge     게이지 충전 배율 · gateGauge 게이트 접근 구간(GATE_AP[0] 안)의 카세트 배율 — 5바퀴 직전에 능력을 준비해 들어가게
+  // echo      SYNC 높이 허용(±px, 잔상 강화) · vfx 화면 고장 연출 세기 0~1(판정과 무관한 연출만, 장애물 테두리 빛도 이만큼)
+  // clean     바퀴가 바뀌며 사라진 마모를 알리는 이름(테이프 라벨)
+  const MAX_DEBUFF = 3, MIN_REACT = 45;
+  const LOOPS = [null,
+    { speed:3.00, debuffs:[],                         drop:null,     wow:1,   carWarn:62, power:1,    gauge:1,    gateGauge:1, echo:8,  vfx:0   },
+    { speed:3.30, debuffs:['NOISE'],                  drop:null,     wow:1,   carWarn:60, power:1,    gauge:1,    gateGauge:1, echo:8,  vfx:.15 },
+    { speed:3.55, debuffs:['NOISE', 'WOW'],           drop:null,     wow:.94, carWarn:56, power:1,    gauge:1,    gateGauge:1, echo:8,  vfx:.3  },
+    { speed:3.80, debuffs:['WOW', 'DROPOUT'],         drop:[360,30], wow:.94, carWarn:52, power:1.05, gauge:1.1,  gateGauge:2, echo:8,  vfx:.5  },
+    { speed:3.95, debuffs:['WOW', 'TANGLE'],          drop:null,     wow:.94, carWarn:50, power:1.1,  gauge:1.1,  gateGauge:1, echo:9,  vfx:.8, clean:'HEAD CLEAN' },
+    { speed:4.10, debuffs:['WOW', 'TANGLE'],          drop:null,     wow:.94, carWarn:48, power:1.15, gauge:1.15, gateGauge:1, echo:10, vfx:.85 },
+    { speed:4.25, debuffs:['WOW', 'TANGLE', 'DROPOUT'], drop:[330,36], wow:.94, carWarn:46, power:1.2, gauge:1.2, gateGauge:1, echo:10, vfx:.9  },
+    { speed:4.40, debuffs:['WOW', 'TANGLE', 'DROPOUT'], drop:[315,40], wow:.93, carWarn:44, power:1.25, gauge:1.25, gateGauge:1, echo:11, vfx:1 }];
+  // 9바퀴부터(Soft Cap): 마지막 줄에서 LOOP_CAP 쪽으로 바퀴마다 남은 거리의 SOFT만큼만 다가간다 — 계속 어려워지지만 증가 폭이 점점 줄어든다
+  const LOOP_CAP = { speed:4.9, drop:[300,44], wow:.92, carWarn:42, power:1.35, gauge:1.35, echo:12, vfx:1 }, SOFT = .25;
+  const CFG = [];
+  function lapCfg(L) {
+    if (CFG[L]) return CFG[L];
+    const last = LOOPS.length - 1;
+    if (L <= last) return (CFG[L] = LOOPS[Math.max(1, L)]);
+    const a = LOOPS[last], k = 1 - Math.pow(1 - SOFT, L - last), mix = (x, y) => x + (y - x) * k;
+    const c = Object.assign({}, a, { gateGauge:1, clean:null });
+    for (const f in LOOP_CAP) c[f] = Array.isArray(a[f]) ? a[f].map((v, i) => Math.round(mix(v, LOOP_CAP[f][i]))) : mix(a[f], LOOP_CAP[f]);
+    c.carWarn = Math.round(c.carWarn);
+    return (CFG[L] = c);
+  }
+  // 숨은 보정(Dynamic Difficulty): 같은 바퀴에서 계속 실패할 때만 아주 조금 돕고, 잘한다고 더 어렵게 만들지는 않는다
+  // 판을 넘어: 같은 바퀴에서 연속 게임오버(2번째부터 0.5씩) · 판 안에서: 한 바퀴에 2번 넘게 부딪힘(0.5씩). 0~1을 ramp씩 천천히 오가고, 그 바퀴를 넘기면 사라진다
+  // assist 1일 때 speed 속도 −4%(장애물 사이 시간 +4%) · gauge 게이지 +10% · drop DROPOUT 끊김 −20% · car 뒤차 경고 +8프레임
+  const DDA = { speed:.04, gauge:.1, drop:.2, car:8, ramp:.004 };
+  // IDIOTAPE LIVE 첫 CALM_T 프레임 동안 지나갈 구간(CALM_FROM부터)은 1바퀴 배치만 남는다 — 연출을 알아보는 동안 정보가 넘치지 않게.
+  // 바퀴가 시작될 때 이미 정해져 있어서, 보이던 장애물이 눈앞에서 사라지는 일은 없다
+  const CALM_T = 150, CALM_FROM = SECRET_AT - 300;
+  // 코스 검증: 착지해서 다시 뛸 틈이 없는 장애물 묶음은 MAX_CHAIN개까지, 2단 점프 한 번 안에 넘을 수 있어야 한다(TIMING 프레임 여유 포함)
+  const MAX_CHAIN = 3, TIMING = 4;
 
   /* ================= 화면 글자 ================= */
   const K = {
@@ -149,28 +197,33 @@
     t7:'CLIMAX', d7:'게이지가 차면 방향키로 ←돌파 ↑정화 →가속',
     pu:'마모 한 단계 제거 · 잠시 마모 면역 · 잔상 복구', br:'짧은 무적 돌진 · 연속으로 부술수록 점수 · 2단 점프 불가', od:'가속 · 높은 점프 · 3단 점프 · 잔상이 장애물을 부순다',
     t8:'잔상', d8:'지난 루프의 나. 대신 맞고, 같이 넘으면 SYNC',
-    tw:'한 바퀴마다 테이프가 닳고, 대신 새 기능이 생긴다',
+    tw:'바퀴마다 테이프가 닳고(동시에 최대 3개), 대신 새 기능이 생긴다',
     w1:'화면에 약한 CRT 노이즈', a1:'지난 루프의 내가 따라온다',
     w2:'박자 밖 점프는 낮아진다', a2:'박자에 뛰면 더 높이',
-    w3:'신호가 끊겨 장애물이 흐려진다', a3:'잔상이 앞서 달려 길을 보여준다',
+    w3:'신호가 끊겨 장애물이 윤곽만 남는다', a3:'잔상이 앞서 달려 길을 보여준다',
+    deck:'능력 지속시간 · 게이지 충전이 늘었다', hc:'헤드를 닦았다',
     w4:'화면이 찢어지고 장애물이 겹친다', a4:'공중에서 3번째 누르면 빨리감기',
     pause:'스페이스바를 누르면 계속'
   };
 
-  // 테이프 마모: 한 바퀴마다 테이프가 한 단계 닳는다. 단계마다 디버프(▼)와 그걸 이겨낼 데크 기능(▲)이 짝으로 들어온다
+  // 테이프 마모: 마모(▼)와 그걸 이겨낼 데크 기능(▲)이 짝으로 들어온다. 어느 바퀴에 무엇이 걸리는지는 LOOPS 표의 debuffs가 정한다
+  // 데크 기능은 2~5바퀴에 하나씩 생겨 계속 남는다(마모를 걷어내도)
   const TAPE = [null,
     { bad:'NOISE', badK:K.w1, good:'ECHO', goodK:K.a1 },
     { bad:'WOW', badK:K.w2, good:'BEAT JUMP', goodK:K.a2 },
     { bad:'DROPOUT', badK:K.w3, good:'ECHO LEAD', goodK:K.a3 },
     { bad:'TANGLE', badK:K.w4, good:'FF DASH', goodK:K.a4 }];
+  const BAD_K = {}; for (const t of TAPE) if (t) BAD_K[t.bad] = t.badK;
   // CLIMAX 선택: 게이지가 차면 세계가 느려지고 방향키로 하나를 고른다
   // ← BREAK 공격·돌파: 짧게(CLIMAX_T) 무적으로 부수며 지나간다. 대신 몸이 무거워 2단 점프·FF DASH가 막히고, 끝나면 HEAT_T 동안 과열(게이지 안 참 · 2단 점프 불가)
-  // ↑ PURIFY 생존·정화: 마모 한 단계를 영구로 걷어내고(없으면 다음 바퀴 마모를 미리 봉인), CLEAN 동안 모든 마모 면역 · 잃은 잔상 하나 복구 · SYNC 판정이 넓어지고 게이지가 계속 찬다
-  //                     마모가 깊을수록 CLEAN이 길어져서 후반일수록 값어치가 오른다
+  // ↑ PURIFY 생존·정화: 지금 걸린 가장 센 마모를 걷어내고(이번 바퀴 동안 · 다음 바퀴에 다시 한 칸 닳는다. 마모가 없으면 다음 바퀴 마모를 미리 봉인),
+  //                     CLEAN 동안 모든 마모 면역 · 잃은 잔상 하나 복구 · SYNC 판정이 넓어지고 게이지가 계속 찬다
+  //                     마모가 많을수록 CLEAN이 길어져서 후반일수록 값어치가 오른다. 단 CLEAN 중에도 게이지가 차므로, PURIFY만 연달아 골라
+  //                     마모 면역이 끊기지 않는 일이 없게 CLEAN은 한 바퀴의 절반쯤만 덮는다(CLEAN_T + CLEAN_PER × 마모, 바퀴 표의 power 배율)
   // → OVERDRIVE 속도·숙련: 무적 없이 빠르고 높이 뛴다(3단 점프). 넘은 장애물은 바짝 붙은 잔상들이 부수고(ECHO STRIKE), 그동안 번 게이지는 끝날 때 1.5배로 돌려받는다
   // 안 고르면 PICK_T 뒤 선택 없이 게이지가 PICK_KEEP만큼 남는다 — 흐름은 멈추지 않고, 어느 쪽도 기본값이 되지 않게
   const POWERS = { up:{ name:'PURIFY', col:C.white, k:K.pu }, left:{ name:'BREAK', col:C.pink, k:K.br }, right:{ name:'OVERDRIVE', col:C.yellow, k:K.od } };
-  const PICK_T = 100, PICK_SLOW = .3, PICK_KEEP = .6, DRIVE_T = 300, HEAT_T = 60, CLEAN_T = 180, CLEAN_PER = 60;
+  const PICK_T = 100, PICK_SLOW = .3, PICK_KEEP = .6, DRIVE_T = 300, HEAT_T = 60, CLEAN_T = 150, CLEAN_PER = 30;
   const BREAK_JUMP = .92, OD_JUMP = 1.1, OD_SPEED = 1.4, OD_BANK = 1.5;
   // 변신 연출: 입력 → XF_STOP 동안 Hit Stop(세계 정지, 실루엣이 하얗게) → 4프레임째 변신 → XF_IN까지 화면 반응(줌 · RGB 분리 · 플래시 · 베이스) → 능력 실행
   // 끝나기 XF_OUT 전부터 네온이 아래부터 꺼지고 잔상이 몸으로 모이며, 끝나는 순간 테이프 띠가 끊겨 날아간다(XF_SNAP)
@@ -203,6 +256,12 @@
     const n = { left:0, up:0, right:0 }; for (const p of picks) if (p.dir in n) n[p.dir]++;
     const all = n.left + n.up + n.right; return all ? { all, left:n.left / all, up:n.up / all, right:n.right / all } : null;
   };
+  // 피격 로그: 부딪힐 때마다 무엇에(B 바리케이드 · W 블록 · T 상자 · D 드론 · E 게이트 · L 간판 · P 구멍 · C 뒤차) · 바퀴 · 걸린 마모 ·
+  // DROPOUT/IDIOTAPE 중이었나 · 켜진 능력 · 잔상이 막았나(guarded) · 그 피격으로 게임오버(fatal). LOOPNIGHT.log()에 사망 원인 표로 나온다
+  const HIT_KEY = 'loopnight-hits', FAIL_KEY = 'loopnight-fails';
+  let hits = [], fails = { lap:0, n:0 };
+  try { hits = JSON.parse(localStorage.getItem(HIT_KEY)) || []; fails = JSON.parse(localStorage.getItem(FAIL_KEY)) || fails; } catch (e) {}
+  const saveHits = () => { try { localStorage.setItem(HIT_KEY, JSON.stringify(hits)); localStorage.setItem(FAIL_KEY, JSON.stringify(fails)); } catch (e) {} };
   window.LOOPNIGHT = {
     log() {
       const NAME = { left:'← BREAK', up:'↑ PURIFY', right:'→ OVERDRIVE', none:'(시간 초과)' }, rate = pickRate(), sum = {}, laps = {};
@@ -219,11 +278,23 @@
         table[NAME[d]] = { '선택률':d === 'none' || !rate ? '-' : (rate[d] * 100).toFixed(1) + '%', '횟수':r.n, '능력 중 피격':r.hit, '게임오버':r.died, '평균 획득 점수':d === 'none' ? '-' : Math.round(r.gain / r.n) };
       }
       console.table(table); console.table(laps);
+      // 바퀴별 피격 원인 · 게임오버 원인(그 순간의 조건 포함)
+      const byLap = {}, fatal = {};
+      for (const h of hits) {
+        const c = h.t + (h.tangle ? '(엉킴)' : ''), r = byLap['LOOP ' + h.lap] || (byLap['LOOP ' + h.lap] = {});
+        r[c] = (r[c] || 0) + 1;
+        if (h.fatal) { const k = 'LOOP ' + h.lap + ' · ' + c + (h.drop ? ' · DROPOUT' : '') + (h.live ? ' · IDIOTAPE' : '') + (h.power ? ' · ' + h.power : ''); fatal[k] = (fatal[k] || 0) + 1; }
+      }
+      console.table(byLap); console.table(fatal);
       return picks.length;
     },
-    clear() { picks = []; savePicks(); }
+    // 코스 검증 결과: 바퀴마다 장애물 수 · 가장 긴 묶음 · 가장 빠듯한 여유(프레임) · 검증이 끈 장애물
+    validate(n = 12) { const t = {}; for (let L = 1; L <= n; L++) { const v = validateLap(L); t['LOOP ' + L] = { '속도':lapCfg(L).speed.toFixed(2), '장애물':v.n, '최장 묶음':v.chain, '최소 여유(f)':v.slack, '끈 것':v.cut.join(' ') || '-' }; } console.table(t); },
+    clear() { picks = []; hits = []; fails = { lap:0, n:0 }; savePicks(); saveHits(); }
   };
-  const speedOf = () => (Math.min(6, 3 + 0.3 * (S.lap - 1)) + (S.climax > 0 ? 0.8 : 0)) * (S.drive > 0 ? OD_SPEED : 1);
+  // 속도: 바퀴 표의 기본 속도(숨은 보정만큼 느리게) + BREAK 돌진, OVERDRIVE 배율. 어떤 경우에도 장애물이 화면에 들어와 닿기까지 MIN_REACT 프레임은 남긴다
+  const speedOf = () => Math.min((W + 20 - HX) / MIN_REACT,
+    (lapCfg(S.lap).speed * (1 - DDA.speed * S.assist) + (S.climax > 0 ? 0.8 : 0)) * (S.drive > 0 ? OD_SPEED : 1));
   // 곡이 있으면 곡의 템포 고정, 없으면 신스 음악이 바퀴·CLIMAX에 따라 빨라진다
   const bpm = () => bgm.active ? BGM.bpm : (116 + Math.min(8, S ? S.lap : 1) * 5) * (S && (S.climax > 0 || S.drive > 0) ? 1.12 : 1);
   const fpb = () => 3600 / bpm();
@@ -235,8 +306,9 @@
           hp:HPMAX, inv:0, shake:0, flash:0, freeze:0, slow:0, banner:0, bannerWord:null, sub:'', enter:null,
           rec:newRec(), ghosts:[], hist:[], past:[], rw:null, pendingRewind:false, live:0, liveLen:0, liveIn:LIVE_IN, liveDone:false, beatHit:false, anim:0, beatT:0, overT:0,
           pops:[], parts:[], debris:[], gauge:0, climax:0, combo:0, chain:0, lapHit:false, falling:0, cars:[], springT:{},
-          cam:0, camV:0, trail:[], fallX:0, fallSp:0, padPh:{}, guardFx:null, echoIn:0, ff:0, ffUsed:false, tapeCard:0, beatFx:0, purged:0, pick:null, pickFx:null, drive:0, cleanFx:0,
-          heat:0, clean:0, cleanMax:1, smash:0, odBank:0, lost:[], pickLog:null,
+          cam:0, camV:0, trail:[], fallX:0, fallSp:0, padPh:{}, guardFx:null, echoIn:0, ff:0, ffUsed:false, tapeCard:0, beatFx:0, pick:null, pickFx:null, drive:0, cleanFx:0,
+          heat:0, clean:0, cleanMax:1, smash:0, odBank:0, lost:[], pickLog:null, climaxMax:CLIMAX_T, driveMax:DRIVE_T,
+          wear:0, seal:0, card:null, assist:0, lapHits:0, lastHit:null,
           xfIn:null, xfOut:null, rings:[], xfp:[], odTrail:[], cleanW:0,
           warp:null, osd:null, gateCue:false, reel:0, pastFx:0, pastFilm:null,
           broken:new Set(), got:new Set(), near:new Set(), fired:new Set() };
@@ -268,6 +340,10 @@
   function gameOver() {
     setMode('over'); S.overT = 0;
     if (S.pickLog) { S.pickLog.died = true; endPower(); }
+    // 숨은 보정용: 같은 바퀴에서 연속으로 몇 번 끝났나 · 마지막 피격이 사망 원인
+    fails = fails.lap === S.lap ? { lap:S.lap, n:fails.n + 1 } : { lap:S.lap, n:1 };
+    if (S.lastHit) S.lastHit.fatal = true;
+    saveHits();
     if (score() > best) { best = score(); newRecord = true; }
     if (S.lap > bestLoop) bestLoop = S.lap;
     try { localStorage.setItem('loopnight-best', String(best)); localStorage.setItem('loopnight-bestloop', String(bestLoop)); } catch (e) {}
@@ -360,7 +436,7 @@
   function bgmFx() {
     const v = BGM.volume * (dropOn() ? .15 : 1);
     if (bgm.gain) bgm.gain.gain.setTargetAtTime(v, ac.currentTime, .06); else if (bgm.el) bgm.el.volume = v;
-    if (bgm.src) bgm.src.playbackRate.value = 1 + Math.max(0, stage() - 1) * .004 * Math.sin(ac.currentTime * 5.3);
+    if (bgm.src) bgm.src.playbackRate.value = 1 + wowAmt() * Math.sin(ac.currentTime * 5.3);
   }
   function sfx(n, x = 0) {
     if (!ac) return;
@@ -432,7 +508,7 @@
     tick() {
       if (bgm.active) return;
       if (!ac || !this.on || (mode !== 'play' && mode !== 'title') || (S && (S.rw || S.warp))) { if (ac) this.next = ac.currentTime + .05; return; }
-      const fever = S && S.climax > 0, st = 60 / bpm() / 2, wow = S ? Math.max(0, stage() - 1) * .004 : 0, lost = S && dropOn(), live = S && liveK() > .2 && S.liveLen - S.live >= S.liveIn;
+      const fever = S && S.climax > 0, st = 60 / bpm() / 2, wow = S ? wowAmt() : 0, lost = S && dropOn(), live = S && liveK() > .2 && S.liveLen - S.live >= S.liveIn;
       while (this.next < ac.currentTime + .12) {
         const i = this.step % 16, t = this.next;
         const fl = 1 + wow * Math.sin(t * 5.3);
@@ -482,8 +558,67 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') setMode('pause'); });
 
   /* ================= 진행 ================= */
-  const active = (o, L) => (o.lap || 1) <= L && (!o.max || L <= o.max) && (!o.tangle || (L - 1 - S.purged >= 4 && !S.clean));
+  // 그 바퀴에 깔리는 장애물: 등장 바퀴 범위 · IDIOTAPE 첫 구간(calm) 제외 · 엉킨 복제는 그 바퀴에 TANGLE이 걸릴 때만 · 코스 검증이 끈 것 제외
+  const present = (o, L) => (o.lap || 1) <= L && (!o.max || L <= o.max) && !calmCut(o, L);
+  const active = (o, L) => present(o, L) && (!o.tangle || (debuffsAt(L).includes('TANGLE') && !S.clean)) && !validateLap(L).off.has(o);
+  // 뒤차는 내 옆을 지나는 자리(경고 + 약 17프레임 뒤)로 따진다
+  const carAt = (o, L) => o.p + lapCfg(L).speed * (lapCfg(L).carWarn + 17);
+  const calmCut = (o, L) => {
+    if (!liveLap(L) || (o.lap || 1) <= 1) return false;
+    const x = o.t === 'C' ? carAt(o, L) : o.p;
+    return x >= CALM_FROM && x < CALM_FROM + lapCfg(L).speed * CALM_T;
+  };
   const wOf = o => o.w || SIZE[o.t][0];
+  /* ---------- 코스 검증 ---------- */
+  // 점프 궤적을 게임과 같은 방식(프레임마다 vy += GRAV, y += vy)으로 계산한다. k = 높이 배율(WOW 박자 밖), dbl = 떨어지기 직전 2단 점프
+  // n = 높이 h보다 높이 떠 있는 프레임 수, rise = 바닥에서 h를 넘기까지 걸리는 프레임
+  function arcAbove(h, k, dbl) {
+    let y = 0, v = JUMP1 * k, n = 0, rise = 0, two = !dbl;
+    for (let t = 1; t < 240; t++) {
+      if (!two && v > 0 && y + v + GRAV >= -h) { v = JUMP2 * k; two = true; }
+      v += GRAV; y += v;
+      if (y >= 0) break;
+      if (-y > h) { n++; if (!rise) rise = t; }
+    }
+    return { n, rise:rise || 99 };
+  }
+  // 바퀴 L에 깔릴 장애물을 그 바퀴의 가장 느린 속도(숨은 보정 포함)와 WOW 박자 밖 점프로 넘을 수 있는지 미리 확인한다
+  // 낮은 간판 아래 지면 장애물은 간판 밑에서 16px 이상 여유가 있어야 하고, 사이에서 내려왔다 다시 오를 시간이 없는 묶음은 MAX_CHAIN개까지 · 2단 점프 한 번에 넘을 수 있어야 한다
+  // 전기 게이트는 박자로 푸는 장애물(꺼진 순간 지나가거나 뛰어넘는다)이라 이웃과 묶지 않고, 켜져 있어도 혼자 2단 점프로 넘을 수 있는지만 본다
+  // 어기면 나중에 덧붙은 장애물부터(엉킨 복제 → 늦게 등장하는 순) 그 바퀴에서 끄고 콘솔에 알린다 — 코스를 손으로 고쳐도 회피 불가능한 조합이 깔리지 않게
+  const VALID = [], HAZ_H = { B:20, W:12, T:36, E:46 }, HERO_W = 12;
+  function validateLap(L) {
+    if (VALID[L]) return VALID[L];
+    const c = lapCfg(L), v = c.speed * (1 - DDA.speed), k = c.debuffs.includes('WOW') ? c.wow : 1, tangle = c.debuffs.includes('TANGLE');
+    const off = new Set(), res = VALID[L] = { off, cut:[], n:0, chain:0, slack:99 };
+    const signs = OBS.filter(o => o.t === 'L' && present(o, L)).map(o => [o.p + 2 - HERO_W / 2, o.p + wOf(o) - 2 + HERO_W / 2]);
+    for (let tries = 0; tries < 20; tries++) {
+      // 지면 장애물: 히트박스(± 몸 반폭)를 지나는 동안 높이 h 위 · 구멍: 몸 가운데가 들어가는 동안 공중
+      const hz = OBS.filter(o => present(o, L) && !off.has(o) && (!o.tangle || tangle) && (HAZ_H[o.t] || o.t === 'P')).map(o => {
+        const x0 = o.t === 'E' ? o.p + 16 : o.p + 3, x1 = o.t === 'E' ? o.p + 57 : o.p + wOf(o) - 3;
+        return o.t === 'P' ? { o, a:x0, b:x1, h:0 } : { o, a:x0 - HERO_W / 2, b:x1 + HERO_W / 2, h:HAZ_H[o.t] };
+      }).sort((p, q) => p.a - q.a);
+      let bad = null;
+      for (const z of hz) if (z.h > SIGN_GAP - 50 && signs.some(([s0, s1]) => z.a < s1 && z.b > s0)) bad = bad || [z];
+      const chains = []; let cur = null;
+      for (const z of hz) {
+        if (cur && z.o.t !== 'E' && cur.list[0].o.t !== 'E' && (z.a - cur.b) / v < arcAbove(cur.h, k).rise + arcAbove(z.h, k).rise + 1) { cur.list.push(z); cur.b = Math.max(cur.b, z.b); cur.h = Math.max(cur.h, z.h); continue; }
+        chains.push(cur = { a:z.a, b:z.b, h:z.h, list:[z] });
+      }
+      res.n = hz.length; res.chain = 0; res.slack = 99;
+      for (const ch of chains) {
+        const need = (ch.b - ch.a) / v + TIMING, can = arcAbove(ch.h, k, true).n;
+        res.slack = Math.min(res.slack, Math.floor(can - need)); res.chain = Math.max(res.chain, ch.list.length);
+        if (can < need || ch.list.length > MAX_CHAIN) bad = bad || ch.list;
+      }
+      if (!bad) break;
+      const opt = bad.filter(z => z.o.tangle || (z.o.lap || 1) > 1).sort((p, q) => (q.o.tangle ? 99 : q.o.lap) - (p.o.tangle ? 99 : p.o.lap));
+      if (!opt.length) { console.warn('LOOP NIGHT: LOOP ' + L + ' 넘기 힘든 묶음', bad.map(z => z.o.t + z.o.p).join(' ')); break; }
+      off.add(opt[0].o); res.cut.push(opt[0].o.t + opt[0].o.p);
+    }
+    if (res.cut.length) console.warn('LOOP NIGHT: LOOP ' + L + ' 검증으로 끈 장애물', res.cut.join(' '));
+    return res;
+  }
   function eachObs(fn, ahead = 20) {
     for (const off of [0, TRACK]) {
       const L = off ? S.lap + 1 : S.lap;
@@ -506,30 +641,40 @@
   // 공연 세기: 라이저 동안 0→1, 끝나기 전 1→0 · 조명 색은 마디마다 넘어간다
   const liveK = () => S && S.live > 0 ? Math.min(1, (S.liveLen - S.live) / S.liveIn, S.live / LIVE_OUT) : 0;
   const LIVE_COL = [C.pink, C.teal, C.yellow, '#8f6bff'];
-  // 테이프 마모: wear = 쌓인 디버프 단계(PURIFY로 한 단계씩 걷어낼 수 있다), stage = 지금 실제로 걸리는 단계(CLEAN 동안 0),
-  // wearMax = 얻은 능력 단계(걷어내도 유지)
-  const wear = () => Math.max(0, Math.min(4, S.lap - 1 - S.purged));
-  const stage = () => S.clean > 0 ? 0 : wear();
+  // 테이프 마모: S.wear = 이 바퀴 마모 목록(LOOPS의 debuffs) 앞에서부터 몇 개가 걸려 있나. 바퀴를 넘을 때마다 한 칸씩 차오르되 목록 길이까지만(넘친 만큼 쌓이지 않아
+  // PURIFY가 후반에도 늘 한 칸을 실제로 걷는다). PURIFY는 맨 뒤(가장 센 것)부터 걷고, 마모가 없을 때 쓰면 seal: 다음 바퀴에 차오르는 한 칸을 막는다
+  // 걸린 마모는 CLEAN 동안 모두 꺼진다 · wearMax = 얻은 데크 기능 단계(2~5바퀴에 하나씩, 걷어내도 유지)
+  const lapDebuffs = L => lapCfg(L).debuffs.slice(0, MAX_DEBUFF);
+  const nextWear = () => Math.min(lapDebuffs(S.lap + 1).length, S.wear + (S.seal ? 0 : 1));
+  const debuffsAt = L => lapDebuffs(L).slice(0, L === S.lap ? S.wear : nextWear());
+  const activeDebuffs = () => S.clean > 0 ? [] : debuffsAt(S.lap);
+  const has = n => S.clean <= 0 && debuffsAt(S.lap).includes(n);
   const wearMax = () => Math.min(4, S.lap - 1);
+  // WOW: 걸린 마모가 많을수록 곡이 더 출렁인다
+  const wowAmt = () => has('WOW') ? .004 * activeDebuffs().length : 0;
   // BREAK와 과열 동안은 몸이 무겁다(2단 점프 · FF DASH 불가), OVERDRIVE 동안은 공중에서 한 번 더 뛴다
   const heavy = () => S.climax > 0 || S.heat > 0;
   const airMax = () => heavy() ? 1 : S.drive > 0 ? 3 : 2;
   const onBeat = () => { const f = fpb(), ph = S.beatT % f; return Math.min(ph, f - ph) <= 5; };
-  // DROPOUT(4바퀴~): 약 5초마다 30프레임 지직거림으로 예고한 뒤 45프레임 동안 신호가 끊긴다
-  const DROP_P = 300, DROP_PRE = 30, DROP_LEN = 45;
-  const dropPh = () => stage() < 3 || S.rw || loopBusy() || S.cam > 0 || S.live > 0 ? -1 : (S.anim + 140) % DROP_P;
+  // DROPOUT: 주기마다 DROP_PRE 프레임 지직거림으로 예고한 뒤 신호가 끊긴다(주기 · 길이는 바퀴 표, 숨은 보정만큼 짧게). 끊긴 동안에도 장애물 윤곽은 남는다
+  const DROP_PRE = 30;
+  const dropCfg = () => lapCfg(S.lap).drop || [300, 0];
+  const dropLen = () => Math.round(dropCfg()[1] * (1 - DDA.drop * S.assist));
+  const dropPh = () => !has('DROPOUT') || S.rw || loopBusy() || S.cam > 0 || S.live > 0 ? -1 : (S.anim + 140) % dropCfg()[0];
   const dropWarn = () => { const p = dropPh(); return p >= 0 && p < DROP_PRE; };
-  const dropOn = () => { const p = dropPh(); return p >= DROP_PRE && p < DROP_PRE + DROP_LEN; };
+  const dropOn = () => { const p = dropPh(); return p >= DROP_PRE && p < DROP_PRE + dropLen(); };
+  // 뒤차 경고: 바퀴 표(+ 숨은 보정). 경고가 뜬 뒤 차가 닿기까지(약 14프레임 더) MIN_REACT는 남긴다
+  const carWarn = () => Math.max(MIN_REACT - 14, Math.round(lapCfg(S.lap).carWarn + DDA.car * S.assist));
   // 잔상 자리: 평소엔 뒤에서 따라오고, 신호가 끊길 땐(ECHO LEAD) 앞으로 달려 나가 지난 루프의 길을 먼저 보여준다
   // OVERDRIVE 동안엔 표지 그림처럼 바짝 붙어 겹쳐 달린다
   // 게이트 2단계부터는 시간이 거꾸로 흐르기 시작해, 잔상들이 뒤에서 앞으로 미끄러져 나간다
   const echoSlot = i => gateZone() >= 2 ? HX + 22 * (i + 1) : dropWarn() || dropOn() ? HX + 34 * (i + 1) : S.drive > 0 ? HX - 7 * (i + 1) : HX - 24 * (i + 1);
   // 점프대 충전: 약 110px 앞부터 다가갈수록 0→1, 지나치면 0
   const padCharge = sx => { const d = sx - HX; return d < -19 ? 0 : Math.max(0, Math.min(1, (110 - d) / 90)); };
-  // WOW(3바퀴~): 테이프가 늘어져 박자를 벗어난 점프는 낮아진다. 대신 박자에 맞추면(BEAT JUMP) 원래보다 높이 뛰고 게이지가 찬다
+  // WOW(3바퀴~): 테이프가 늘어져 박자를 벗어난 점프는 낮아진다(바퀴 표의 wow). 대신 박자에 맞추면(BEAT JUMP) 원래보다 높이 뛰고 게이지가 찬다
   // BREAK 중엔 몸이 무거워 낮게(높이 85%), OVERDRIVE 중엔 높게(높이 120%) 뛴다
   function jump(n) {
-    const beat = wearMax() >= 2 && onBeat(), k = (beat ? 1.05 : stage() >= 2 ? .94 : 1) * (S.climax > 0 ? BREAK_JUMP : S.drive > 0 ? OD_JUMP : 1);
+    const beat = wearMax() >= 2 && onBeat(), k = (beat ? 1.05 : has('WOW') ? lapCfg(S.lap).wow : 1) * (S.climax > 0 ? BREAK_JUMP : S.drive > 0 ? OD_JUMP : 1);
     if (n === 1) { S.vy = JUMP1 * k; S.jumps = 1; sfx('jump'); }
     else { S.vy = JUMP2 * k; S.jumps++; S.spin = 18; sfx('jump2'); burst(HX, S.y - 4, 8, S.drive > 0 ? [C.yellow, C.white] : [C.teal, C.white], 1.4); }
     if (beat) { S.beatFx = 14; addGauge(1); sfx('beat'); }
@@ -552,8 +697,16 @@
     if (S.hp <= 0) { gameOver(); return false; }
     return true;
   }
-  // onGuard: 잔상이 대신 맞았을 때 부딪힌 것을 부수는 일
-  function hurt(onGuard) {
+  // 피격 기록(사망 원인 · 숨은 보정): o = 부딪힌 것 { t, tangle }
+  function logHit(o, guarded) {
+    S.lapHits++;
+    const e = { lap:S.lap, t:o.t, tangle:!!o.tangle, guarded, deb:activeDebuffs().join('+'), drop:dropOn() || dropWarn(), live:S.live > 0,
+                power:xfDir() ? POWERS[xfDir()].name : S.heat > 0 ? 'OVERHEAT' : '', hp:S.hp, fatal:false };
+    hits.push(e); if (hits.length > LOG_MAX) hits.shift(); saveHits(); S.lastHit = e;
+  }
+  // onGuard: 잔상이 대신 맞았을 때 부딪힌 것을 부수는 일 · o: 부딪힌 것(피격 기록용)
+  function hurt(onGuard, o) {
+    logHit(o, S.ghosts.length > 0);
     if (S.ghosts.length) { guard(onGuard); return; }
     S.shake = 14; S.freeze = 8; S.flash = 6; sfx('hit');
     burst(HX, S.y - 14, 12, [C.red, C.white]);
@@ -576,7 +729,7 @@
     S.falling = FALL_T; S.ground = false; S.vy = 1.5; S.trail = [];
     S.fallX = S.d + sx + w / 2 - HX; S.fallSp = speedOf();
     for (let i = 0; i < 10; i++) S.parts.push({ x:sx + 3 + Math.random() * (w - 6), y:GROUND + Math.random() * 4, vx:(Math.random() - .5) * .8, vy:1 + Math.random() * 2, g:.55, life:60, c:['#1a5e77', '#051e31', C.yellow][i % 3] });
-    sfx('fall');
+    sfx('fall'); logHit({ t:'P' }, false);
     if (damage()) S.pendingRewind = true;
   }
   function stepFall() {
@@ -612,18 +765,22 @@
     if (bgm.active) bgmPlay(beatToSong(s.beatT));
   }
   // OVERDRIVE 중에 번 게이지는 쌓아 뒀다가 끝날 때 돌려받고, BREAK와 과열 중엔 차지 않는다. CLEAN 중엔 그대로 찬다
+  // 충전량은 바퀴 표의 gauge 배율(후반일수록 많이) × 숨은 보정
+  const gaugeMul = () => lapCfg(S.lap).gauge * (1 + DDA.gauge * S.assist);
   function addGauge(n) {
     if (S.drive > 0) { S.odBank += n; return; }
     if (S.climax > 0 || S.heat > 0 || S.pick) return;
-    S.gauge = Math.min(GAUGE, S.gauge + n);
+    S.gauge = Math.min(GAUGE, S.gauge + n * gaugeMul());
     if (S.gauge >= GAUGE) openPick();
   }
   // 게이지가 차면: 세계가 느려지고(30%) 소리가 먹먹해지며, 주인공 둘레에 방향 키 세 개가 차례로 켜진다
   function openPick() { S.pick = { t:0, acc:0 }; S.flash = 3; sfx('pickOpen'); muffle(700, .2); }
   // 마모가 있으면 걷어내고, 없으면 다음 바퀴 마모를 미리 봉인한다(한 바퀴 앞까지만)
-  const canPurify = () => S.purged < S.lap;
+  const canPurify = () => S.wear > 0 || !S.seal;
+  // 능력 지속시간: 바퀴 표의 power 배율(과열은 그만큼 짧게)
+  const powerT = t => Math.round(t * lapCfg(S.lap).power);
   function logPick(dir) {
-    const e = { dir, lap:S.lap, wear:wear(), hp:S.hp, ghosts:S.ghosts.length, s0:score(), hit:false, died:false, gain:0, at:Date.now() };
+    const e = { dir, lap:S.lap, wear:S.wear, hp:S.hp, ghosts:S.ghosts.length, s0:score(), hit:false, died:false, gain:0, at:Date.now() };
     picks.push(e); if (picks.length > LOG_MAX) picks.shift(); savePicks();
     return e;
   }
@@ -636,9 +793,9 @@
     S.freeze = XF_STOP; S.flash = 0; S.shake = 6; S.xfIn = { dir, t:0 }; S.xfOut = null;
     const n = dir === 'up' ? 0 : dir === 'left' ? 1 : 2; sfx('choose', n); sfx('xform', n); muffle(20000, .45);
     endPower(); S.pickLog = logPick(dir);
-    if (dir === 'left') { S.climax = CLIMAX_T; S.smash = 0; sfx('climax'); }
+    if (dir === 'left') { S.climax = S.climaxMax = powerT(CLIMAX_T); S.smash = 0; sfx('climax'); }
     else if (dir === 'up') purify();
-    else { S.drive = DRIVE_T; S.odBank = 0; }
+    else { S.drive = S.driveMax = powerT(DRIVE_T); S.odBank = 0; }
   }
   // 시간 안에 못 고르면: 아무 능력도 켜지지 않고 게이지가 조금 빠진 채 남는다
   function skipPick() {
@@ -649,10 +806,11 @@
   function purify() {
     // 화면에 있던 엉킨 장애물은 풀려 흩어진다 (마모를 걷어내기 전에 찾아야 보인다)
     eachObs((o, sx, key) => { if (o.tangle) { S.broken.add(key); burst(sx + wOf(o) / 2, GROUND - 14, 14, [C.white, C.glow, '#8a5a3a'], 2); } });
-    const w = wear();
-    S.pickFx.sub = w > 0 ? TAPE[w].bad + ' OFF' : 'NEXT LOOP SEALED';
-    S.purged++; S.gauge = 0; S.cleanFx = 40 + XF_STOP; S.cleanW = w; S.inv = Math.max(S.inv, 40);
-    S.clean = S.cleanMax = CLEAN_T + CLEAN_PER * w;
+    const list = debuffsAt(S.lap), w = list.length;
+    S.pickFx.sub = w > 0 ? list[w - 1] + ' OFF' : 'NEXT LOOP SEALED';
+    if (S.wear > 0) S.wear--; else S.seal = 1;
+    S.gauge = 0; S.cleanFx = 40 + XF_STOP; S.cleanW = w; S.inv = Math.max(S.inv, 40);
+    S.clean = S.cleanMax = powerT(CLEAN_T + CLEAN_PER * w);
     if (S.lost.length && S.ghosts.length < 3) {
       const g = S.lost.pop(); g.x = HX; g.flash = 24; S.ghosts.push(g); S.echoIn = 0;
       pop('ECHO RESTORED', HX, S.y - 60, C.glow);
@@ -702,13 +860,15 @@
     if (S.heat > 0 && S.anim % 3 === 0) S.parts.push({ x:HX - 6 + Math.random() * 12, y:S.y - 14 - Math.random() * 16, vx:-.2, vy:-.5, g:-.01, life:26, c:Math.random() < .5 ? '#5a2a30' : C.red });
   }
   const comboMult = () => Math.min(S.drive > 0 ? 8 : 5, 1 + Math.floor(S.combo / 8));
+  // 충전 구간: 게이트에 다가가는 동안(gateGauge > 1인 바퀴만) 카세트가 하얗게 달아올라 게이지가 더 찬다 — 5바퀴 직전에 능력을 준비해 들어가게
+  const chargeZone = () => lapCfg(S.lap).gateGauge > 1 && gateZone() >= 1;
   function collect(x, y) {
     S.combo++;
-    const mult = comboMult();
+    const mult = comboMult(), boost = chargeZone();
     S.pts += 50 * mult * (S.drive > 0 ? 2 : 1);
-    burst(x, y, 5, [C.yellow, C.teal], 1.1);
+    burst(x, y, boost ? 9 : 5, boost ? [C.white, C.yellow] : [C.yellow, C.teal], 1.1);
     sfx('pick', Math.min(10, S.combo % 10));
-    addGauge(1);
+    addGauge(boost ? lapCfg(S.lap).gateGauge : 1);
   }
   function nextLap() {
     const g = Math.min(4, S.lap - 1); // 이번 전환의 고장 단계: 1→2 바퀴 0 … 5바퀴부터 4
@@ -716,9 +876,15 @@
     S.echoIn = 160;
     S.rec = newRec();
     const perfect = !S.lapHit; S.lapHit = false;
-    const st0 = wear();
-    S.lap++;
-    if (S.lap <= 5 || wear() > st0) S.tapeCard = 240; // 새 능력이 생기거나 마모가 한 단계 오르면 라벨
+    const before = debuffsAt(S.lap), pw0 = lapCfg(S.lap).power, nw = nextWear();
+    S.lap++; S.wear = nw; S.seal = 0; S.lapHits = 0;
+    // 테이프 라벨: 새로 걸린 마모(▼) · 바퀴가 걷어낸 마모(✦ clean) · 새 데크 기능(▲, 2~5바퀴) 또는 능력 성장(▲ DECK, 표에 있는 바퀴까지)
+    const now = debuffsAt(S.lap), c = lapCfg(S.lap), card = [];
+    for (const d of now) if (!before.includes(d)) card.push({ k:'bad', name:d, text:BAD_K[d] });
+    if (c.clean) for (const d of before) if (!now.includes(d)) card.push({ k:'clean', name:c.clean, text:d + ' 해제 · ' + K.hc });
+    if (S.lap <= 5) card.push({ k:'good', name:TAPE[wearMax()].good, text:TAPE[wearMax()].goodK });
+    else if (S.lap < LOOPS.length && c.power > pw0) card.push({ k:'good', name:'DECK +' + Math.round((c.power - 1) * 100) + '%', text:K.deck });
+    S.card = card.length ? card : null; S.tapeCard = card.length ? 240 : 0;
     const keep = s => new Set([...s].filter(k => k.startsWith(S.lap + ':')));
     S.broken = keep(S.broken); S.got = keep(S.got); S.near = keep(S.near); S.fired = keep(S.fired);
     S.banner = 0;
@@ -841,6 +1007,9 @@
     if (S.slow > 0) { S.slow--; if (S.slow % 2) { stepFx(0); return; } }
 
     S.anim++;
+    // 숨은 보정: 목표치(같은 바퀴 연속 게임오버 · 이번 바퀴 피격 수)로 천천히 다가간다
+    const goal = Math.min(1, Math.max(0, S.lap === fails.lap ? (fails.n - 1) * .5 : 0, (S.lapHits - 2) * .5));
+    S.assist += Math.max(-DDA.ramp, Math.min(DDA.ramp, goal - S.assist));
     const pbt = S.beatT;
     S.beatT = bgm.active && bgm.playing ? songToBeat(bgmTime()) : S.beatT + 1;
     S.beatHit = Math.floor(S.beatT / fpb()) !== Math.floor(pbt / fpb()); // 이번 프레임에 박이 넘어갔나
@@ -890,7 +1059,7 @@
       OBS.forEach((o, i) => {
         if (o.t !== 'C' || !active(o, L)) return;
         const p = o.p + off, key = L + ':' + i;
-        if (S.prevD < p && S.d >= p && !S.fired.has(key)) { S.fired.add(key); S.cars.push({ t:0, warn:Math.max(38, 66 - S.lap * 4), x:-60, passed:false }); }
+        if (S.prevD < p && S.d >= p && !S.fired.has(key)) { S.fired.add(key); S.cars.push({ t:0, warn:carWarn(), x:-60, passed:false }); }
       });
     }
     const hx = HX - 6, hw = 12, hy = S.y - 30, hh = 30;
@@ -902,7 +1071,7 @@
       const bx = car.x + 4, bw = 44, by = GROUND - 15;
       if (!S.falling && !S.ff && bx < hx + hw && bx + bw > hx) {
         if (S.y > by + 2 && S.climax > 0 && !car.passed) { car.passed = true; smash(car.x + 26, GROUND - 9, HX, S.y - 48); car.x = W + 200; }
-        else if (S.y > by + 2 && S.climax === 0 && S.inv === 0) { hurt(() => { burst(car.x + 26, GROUND - 9, 14, [C.white, C.red, C.gray], 2.4); car.x = W + 200; }); return; }
+        else if (S.y > by + 2 && S.climax === 0 && S.inv === 0) { hurt(() => { burst(car.x + 26, GROUND - 9, 14, [C.white, C.red, C.gray], 2.4); car.x = W + 200; }, { t:'C' }); return; }
         else if (!car.passed && S.y <= by + 2) { car.passed = true; S.pts += 150; pop('DODGE +150', HX, S.y - 48, C.teal); sfx('close'); }
       }
     }
@@ -948,7 +1117,7 @@
           } else if (S.climax > 0) {
             S.broken.add(key);
             smash(b.x + b.w / 2, o.t === 'L' ? b.h - 8 : b.y + b.h / 2, b.x + b.w / 2, o.t === 'L' ? b.h + 4 : b.y - 6);
-          } else if (S.inv === 0) { if (o.t === 'E') sfx('zap'); hurt(() => S.broken.add(key)); stop = true; }
+          } else if (S.inv === 0) { if (o.t === 'E') sfx('zap'); hurt(() => S.broken.add(key), o); stop = true; }
         } else if (xo && !S.ground && o.t !== 'D' && o.t !== 'E' && !S.near.has(key)) {
           const gap = o.t === 'L' ? hy - (b.y + b.h) : b.y - S.y;
           if (gap >= 0 && gap < 8) { S.near.add(key); S.pts += 100; S.slow = 16; pop('CLOSE! +100', HX, S.y - 48, C.white); sfx('close'); burst(HX, S.y, 8, [C.teal, C.white], 1.4); }
@@ -963,8 +1132,8 @@
           if (o.t === 'C' || o.t === 'S' || !active(o, S.lap) || S.broken.has(S.lap + ':' + i)) return;
           const c = o.p + wOf(o) / 2;
           if (!(S.prevD < c && S.d >= c) || h < 6) return;
-          // CLEAN 중엔 테이프가 깨끗해 지난 루프와 맞추기 쉽다(±8 → ±14)
-          const tol = S.clean > 0 ? 14 : 8;
+          // 허용 높이는 바퀴 표의 echo(후반일수록 넓게), CLEAN 중엔 테이프가 깨끗해 +6 더 넓다
+          const tol = lapCfg(S.lap).echo + (S.clean > 0 ? 6 : 0);
           const hit = S.drive > 0 ? S.ghosts.slice() : S.ghosts.filter(g => { const e = g.rec[idx] || 0; return e > 6 && Math.abs(e - h) <= tol; });
           if (!hit.length) return;
           const m = hit.length, strike = S.drive > 0 && o.t !== 'P';
@@ -981,20 +1150,20 @@
       const L = off ? S.lap + 1 : S.lap;
       for (let i = 0; i < PICK.length; i++) {
         const k = PICK[i], key = L + ':' + i;
-        if (S.got.has(key)) continue;
+        if (S.got.has(key) || k.lap > L) continue;
         const sx = k.p + off - S.d + HX;
         if (sx < HX - 16 || sx > HX + 16) continue;
         const py = GROUND - k.h;
         if (sx + 7 > hx && sx - 7 < hx + hw && py > hy && py - 10 < hy + hh) { S.got.add(key); collect(sx, py - 4); }
       }
     }
-    // BREAK가 끝나면 아주 짧은 무적 뒤 과열. OVERDRIVE가 끝나면 쌓아 둔 게이지를 1.5배로 돌려받는다. CLEAN이 끝나면 마모가 돌아온다
-    if (S.climax > 0) { S.climax--; S.gauge = GAUGE * S.climax / CLIMAX_T; if (S.climax === 0) { S.gauge = 0; S.inv = 20; S.heat = HEAT_T; endPower('left'); xfEnd('left'); } }
+    // BREAK가 끝나면 아주 짧은 무적 뒤 과열(후반일수록 짧게). OVERDRIVE가 끝나면 쌓아 둔 게이지를 1.5배로 돌려받는다. CLEAN이 끝나면 마모가 돌아온다
+    if (S.climax > 0) { S.climax--; S.gauge = GAUGE * S.climax / S.climaxMax; if (S.climax === 0) { S.gauge = 0; S.inv = 20; S.heat = Math.round(HEAT_T / lapCfg(S.lap).power); endPower('left'); xfEnd('left'); } }
     if (S.drive > 0) {
-      S.drive--; S.gauge = GAUGE * S.drive / DRIVE_T;
+      S.drive--; S.gauge = GAUGE * S.drive / S.driveMax;
       if (S.drive === 0) {
         const n = Math.round(S.odBank * OD_BANK); S.odBank = 0; endPower('right'); xfEnd('right');
-        if (n) { pop('CHARGE +' + Math.round(Math.min(1, n / GAUGE) * 100) + '%', HX, S.y - 60, C.yellow); addGauge(n); }
+        if (n) { pop('CHARGE +' + Math.round(Math.min(1, n * gaugeMul() / GAUGE) * 100) + '%', HX, S.y - 60, C.yellow); addGauge(n); }
       }
     }
     if (S.heat > 0) S.heat--;
@@ -1010,7 +1179,8 @@
     }
     if (S.live > 0) {
       const t = S.liveLen - S.live, f = fpb();
-      if (t === S.liveIn) { sfx('livedrop'); S.flash = 7; S.shake = 8; }
+      // 드롭: 시간이 잠깐 늘어진다(반 속도 12프레임) — 화면이 터지는 순간 손이 바빠지지 않게
+      if (t === S.liveIn) { sfx('livedrop'); S.flash = 7; S.shake = 8; S.slow = 24; }
       if (t >= S.liveIn && S.beatHit) {
         for (let i = 0; i < 6; i++) { const left = i % 2; S.parts.push({ x:left ? Math.random() * 110 : W - Math.random() * 110, y:-VIEW_TOP - 4, vx:(Math.random() - .5) * .6, vy:.6 + Math.random(), g:.015, life:150, c:LIVE_COL[(i + Math.floor(S.beatT / f)) % 4] }); }
         if (Math.floor(S.beatT / f) % 4 === 0) { burst(56, 120, 16, LIVE_COL, 2.6); burst(W - 56, 120, 16, LIVE_COL, 2.6); }
@@ -1172,17 +1342,18 @@
     }
     ctx.globalAlpha = 1;
   }
-  /* ================= 테이프 마모 (루프마다 한 단계씩, 화면 효과는 HUD를 건드리지 않는다) ================= */
-  // NOISE(2바퀴~): 약한 CRT 스노우와 천천히 굴러 내려가는 밝은 띠. 단계가 오를수록 눈이 조금씩 늘어난다
+  /* ================= 테이프 마모 (바퀴 표대로, 화면 효과는 HUD를 건드리지 않는다) ================= */
+  // NOISE: 약한 CRT 스노우와 천천히 굴러 내려가는 밝은 띠. 마모가 걸려 있는 동안 늘 깔리고, 걸린 마모가 많을수록 눈이 조금씩 늘어난다
   function drawTapeNoise() {
-    const st = stage(); if (st < 1 || S.rw || S.live > 0 || mode !== 'play') return;
+    const n = activeDebuffs().length; if (!n || S.rw || S.live > 0 || mode !== 'play') return;
     ctx.globalAlpha = .18;
-    for (let i = 0; i < 20 + st * 10; i++) R(Math.random() < .5 ? C.white : C.mist, Math.random() * W, Math.random() * H, 1, 1);
+    for (let i = 0; i < 20 + n * 10; i++) R(Math.random() < .5 ? C.white : C.mist, Math.random() * W, Math.random() * H, 1, 1);
     ctx.globalAlpha = .05; R(C.white, 0, (S.anim * .7) % (H + 40) - 20, W, 10); ctx.globalAlpha = 1;
   }
-  // TANGLE(5바퀴~): 강한 글리치 — VHS 트래킹 띠가 화면을 훑으며 그 줄이 옆으로 밀리고, 가끔 화면 전체가 분홍빛으로 이중으로 번진다
+  // TANGLE(5바퀴~): 강한 글리치 — VHS 트래킹 띠가 화면을 훑으며 그 줄이 옆으로 밀리고, 가끔 화면 전체가 분홍빛으로 이중으로 번진다(세기는 바퀴 표의 vfx)
   function drawTangle() {
-    if (stage() < 4 || S.rw || S.live > 0 || mode !== 'play') return;
+    if (!has('TANGLE') || S.rw || S.live > 0 || mode !== 'play') return;
+    const v = lapCfg(S.lap).vfx;
     const dur = 40, ph = (S.anim + 53) % 150;
     if (ph < dur) {
       const bh = 12, by = Math.round(H - bh - ph / dur * (H - bh)), dx = ((ph >> 1) % 2 ? 1 : -1) * 3;
@@ -1191,25 +1362,49 @@
       ctx.globalAlpha = .18; R(C.white, 0, by, W, 1); ctx.globalAlpha = .25; R(C.pink, 0, by + bh, W, 1); ctx.globalAlpha = 1;
     }
     if ((S.anim + 90) % 240 < 6) {
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3;
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .3 * v;
       ctx.drawImage(cv, Math.round(3 * SX), 0); ctx.restore();
-      ctx.globalAlpha = .08; R(C.pink, 0, 0, W, H); ctx.globalAlpha = 1;
+      ctx.globalAlpha = .08 * v; R(C.pink, 0, 0, W, H); ctx.globalAlpha = 1;
     }
   }
-  // DROPOUT(4바퀴~): 신호가 끊기는 동안 세계가 잡음에 묻힌다(장애물은 희미한 윤곽만). 잔상과 나는 잡음 위에 남는다. 직전엔 지직거림이 늘며 예고
+  // DROPOUT: 신호가 끊기는 동안 세계가 잡음에 묻힌다. 색과 디테일은 잃어도 장애물 윤곽(한 색 실루엣)은 잡음 위에 남는다 — 무엇이 어디 있는지는 늘 보이게
+  // 잔상과 나도 잡음 위에 남는다. 직전엔 지직거림이 늘며 예고
   function drawDropout() {
-    const p = dropPh(); if (p < 0 || p >= DROP_PRE + DROP_LEN) return;
+    const p = dropPh(), len = dropLen(); if (p < 0 || p >= DROP_PRE + len) return;
     const top = Math.round(S.cam) - VIEW_TOP;
     if (p < DROP_PRE) {
       ctx.globalAlpha = .5;
       for (let i = 0; i < p * 2; i++) R(Math.random() < .5 ? C.white : C.glow, Math.random() * W, top + Math.random() * H, 1 + (Math.random() * 3 | 0), 1);
       ctx.globalAlpha = 1; return;
     }
-    const k = p - DROP_PRE, fade = Math.min(1, k / 4, (DROP_LEN - k) / 6);
-    ctx.globalAlpha = .78 * fade; R(C.night, 0, top, W, H);
+    const k = p - DROP_PRE, fade = Math.min(1, k / 4, (len - k) / 6);
+    ctx.globalAlpha = .74 * fade; R(C.night, 0, top, W, H);
     ctx.globalAlpha = .55 * fade;
     for (let i = 0; i < 220; i++) R(Math.random() < .7 ? '#3d5868' : C.mist, Math.random() * W, top + Math.random() * H, 1 + (Math.random() * 2 | 0), 1);
     for (let i = 0; i < 3; i++) R(C.white, 0, top + Math.random() * H, W, 1);
+    hazardOutline(.75 * fade);
+    ctx.globalAlpha = 1;
+  }
+  // 장애물 윤곽: 그림 모양 그대로 한 색으로. 신호처럼 가끔 흐려질 뿐 사라지지 않는다. 점프대는 노랗게(밟을 곳)
+  const HZ_OF = { B:'bar', W:'block', T:'crate', D:'drone' };
+  function hazardOutline(a) {
+    const col = C.mist;
+    eachObs((o, sx, key, L) => {
+      ctx.globalAlpha = a * (hash(S.anim * .31 + o.p) < .12 ? .55 : 1);
+      const n = HZ_OF[o.t];
+      if (n) { const y = o.t === 'D' ? droneTop(o, L) : GROUND - HZ[n][3]; if (ok(IMG.haz)) ctx.drawImage(tintPart(IMG.haz, HZ[n], col), sx, y); else R(col, sx, y, HZ[n][2], HZ[n][3]); }
+      else if (o.t === 'E' && ok(IMG.haz)) {
+        if (gateOn(o)) ctx.drawImage(tintPart(IMG.haz, HZ.gate, col), sx, GROUND - 48);
+        else for (const dx of [0, 58]) ctx.drawImage(tintPart(IMG.haz, [HZ.gate[0] + dx, 0, 15, 48], col), sx + dx, GROUND - 48);
+      }
+      else if (o.t === 'P') { const w = wOf(o); R(col, sx, GROUND, 2, 12); R(col, sx + w - 2, GROUND, 2, 12); R(C.yellow, sx - 12, GROUND + 3, 12, 2); }
+      else if (o.t === 'S') R(C.yellow, sx - 4, GROUND - 4, 27, 3);
+      else if (o.t === 'L') {
+        const w = wOf(o), k = w >= 60 ? 'low64' : w >= 44 ? 'low50' : 'low36', m = SG[k], x = Math.round(sx + (w - m[2]) / 2), y = GROUND - SIGN_GAP + 1 - m[3];
+        for (const rx of LOW_ROD[k]) R(col, x + rx + 1, -VIEW_TOP, 2, y + VIEW_TOP);
+        if (ok(IMG.signs)) ctx.drawImage(tintPart(IMG.signs, m, col), x, y); else R(col, x, y, m[2], m[3]);
+      }
+    });
     ctx.globalAlpha = 1;
   }
   // 박자 가이드(WOW~): 발밑 괄호가 다음 박자를 향해 좁혀 들고, 박자 순간(±5프레임)엔 하얗게 — 지금 뛰면 BEAT JUMP
@@ -1309,13 +1504,15 @@
     }
   }
   /* ---------- 깨진 CRT 자막 ---------- */
+  const LANE_TOP = 96; // 화면 기준: 이보다 아래는 장애물(간판 판 · 드론 · 지면)이 지나가는 높이
   // 세계가 고장 나며 새어 나오는 시스템 메시지: 같은 자리에 몇 프레임 머물다 사라지고, 가로 띠로만 보이며 색이 갈라진다 (UI가 아니라 화면의 고장)
-  function glitchText(n, seed, big, words = GLITCH) {
+  // yMax: 자막이 내려올 수 있는 가장 아래(게임 중엔 장애물이 지나는 높이를 덮지 않게 위쪽에만)
+  function glitchText(n, seed, big, words = GLITCH, yMax = H - 38) {
     for (let i = 0; i < n; i++) {
       const r = k => hash(seed * 7.13 + i * 31.7 + k * 3.1);
       let w = words[Math.floor(r(1) * words.length)];
       if (w === 'LOOP_') w += String(S.lap).padStart(2, '0');
-      const size = big && r(2) < .35 ? 16 : 8, x = Math.round(12 + r(3) * (W - 130)), y = Math.round(18 + r(4) * (H - 56));
+      const size = big && r(2) < .35 ? 16 : 8, x = Math.round(12 + r(3) * (W - 130)), y = Math.round(18 + r(4) * (yMax - 18));
       ctx.font = `700 ${size}px ${F_PIX}`; const tw = Math.ceil(ctx.measureText(w).width);
       const band = Math.max(3, Math.floor((.35 + r(5) * .65) * (size + 2))), by = y - 1 + Math.floor(r(6) * (size + 3 - band));
       ctx.save(); ctx.beginPath(); ctx.rect(x - 4, by, tw + 8, band); ctx.clip();
@@ -1332,6 +1529,7 @@
     ctx.drawImage(cv, sx, sy, sw, sh, sx + Math.round(dx * SX), sy, sw, sh); ctx.restore();
   }
   // 게이트 접근(화면 기준): 1단계 게이트 쪽이 살짝 출렁 · 3단계 RGB 분리가 커지고, 화면 일부가 1~2프레임씩 과거 장면으로 깜빡이며 자막이 새기 시작
+  // 과거 장면 조각과 자막은 화면 위쪽(LANE_TOP 위, 천장 쪽)에만 — 지면 · 간판 높이의 장애물을 가리지 않는다
   function drawGateFx(cam) {
     const z = gateZone(); if (!z || mode !== 'play') return;
     const gx = Math.round(TRACK - S.d + HX), gl = Math.min(4, S.lap - 1), near = Math.max(0, 1 - gateDist() / GATE_AP[0]);
@@ -1342,10 +1540,10 @@
     ctx.drawImage(cv, Math.round(amp * SX), 0); ctx.restore();
     if (snaps.length && S.anim % 5 < 2) {
       const sd = Math.floor(S.anim / 5), f = snaps[Math.floor(hash(sd) * snaps.length)];
-      const w = 80 + Math.floor(hash(sd + .3) * 140), h = 30 + Math.floor(hash(sd + .6) * 60), x = Math.floor(hash(sd + .9) * (W - w)), y = Math.floor(hash(sd + 1.2) * (H - h));
+      const w = 80 + Math.floor(hash(sd + .3) * 140), h = 30 + Math.floor(hash(sd + .6) * 30), x = Math.floor(hash(sd + .9) * (W - w)), y = Math.floor(hash(sd + 1.2) * (LANE_TOP - h));
       ctx.globalAlpha = .55; ctx.drawImage(f, x / 2, y / 2, w / 2, h / 2, x, y, w, h); ctx.globalAlpha = 1;
     }
-    glitchText(1 + (gl >> 1), Math.floor(S.anim / 3), false);
+    glitchText(1 + (gl >> 1), Math.floor(S.anim / 3), false, GLITCH, LANE_TOP - 14);
   }
   /* ---------- 통과: 시간 되감기 ---------- */
   // 카메라: 순간 줌 아웃(0.88) → 되감는 동안 천천히 → 끝에 빠르게 줌 인(1.08 → 1)
@@ -1506,14 +1704,25 @@
       ctx.restore();
     }
   }
+  // 장애물 테두리 빛: 화면 고장 연출(바퀴 표의 vfx · IDIOTAPE · DROPOUT 예고)이 셀수록 옅은 빛 테두리를 둘러 어두운 배경 · 연출 속에서도 모양이 읽히게(1바퀴엔 없다)
+  const rimK = () => mode !== 'play' ? 0 : Math.min(1, lapCfg(S.lap).vfx + liveK() * .6 + (dropWarn() ? .3 : 0));
+  function hzRim(n, x, y) {
+    const a = rimK();
+    if (a > 0 && ok(IMG.haz)) {
+      const c = tintPart(IMG.haz, HZ[n], C.paper); ctx.globalAlpha = .4 * a;
+      for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) ctx.drawImage(c, Math.round(x) + ox, Math.round(y) + oy);
+      ctx.globalAlpha = 1;
+    }
+    hz(n, x, y);
+  }
   function drawObs(o, sx, key, L, anim) {
     const t = o.t, base = GROUND;
-    if (t === 'B') hz('bar', sx, base - 22);
-    else if (t === 'W') hz('block', sx, base - 14);
-    else if (t === 'T') hz('crate', sx, base - 38);
+    if (t === 'B') hzRim('bar', sx, base - 22);
+    else if (t === 'W') hzRim('block', sx, base - 14);
+    else if (t === 'T') hzRim('crate', sx, base - 38);
     else if (t === 'D') {
       const top = droneTop(o, L);
-      hz('drone', sx, top);
+      hzRim('drone', sx, top);
       if ((anim >> 2) % 2) { ctx.globalAlpha = .5; R(C.glow, sx + 5, top + 16, 2, 3); R(C.glow, sx + 12, top + 16, 2, 3); ctx.globalAlpha = 1; }
     } else if (t === 'E') {
       if (gateOn(o)) {
@@ -1624,10 +1833,13 @@
     for (const off of [0, TRACK]) {
       const L = off ? S.lap + 1 : S.lap;
       for (let i = 0; i < PICK.length; i++) {
-        if (S.got.has(L + ':' + i)) continue;
-        const k = PICK[i], sx = Math.round(k.p + off - S.d + HX);
+        const k = PICK[i];
+        if (S.got.has(L + ':' + i) || k.lap > L) continue;
+        const sx = Math.round(k.p + off - S.d + HX), cy = GROUND - k.h - 10 + Math.round(Math.sin((S.anim + k.p) / 9));
         if (sx < -12 || sx > W + 12) continue;
-        hz('cas', sx - 8, GROUND - k.h - 10 + Math.round(Math.sin((S.anim + k.p) / 9)));
+        hz('cas', sx - 8, cy);
+        // 충전 구간의 카세트는 하얗게 달아오른다
+        if (!off && chargeZone() && TRACK - k.p < GATE_AP[0] && ok(IMG.haz)) { ctx.globalAlpha = .35 + .35 * Math.sin((S.anim + k.p) / 4); ctx.drawImage(tintPart(IMG.haz, HZ.cas, C.white), sx - 8, cy); ctx.globalAlpha = 1; }
       }
     }
     eachObs((o, sx, key, L) => { if (o.t !== 'P') { drawObs(o, sx, key, L, S.anim); if (o.tangle) tangleFx(o, sx); } });
@@ -1847,6 +2059,9 @@
     hi(IMG.hud, HU.portrait, 6, 6);
     bar('bar5', SLOT5, 33, 8, S.hp / HPMAX, S.hp <= 1 && (S.anim >> 3) % 2 ? C.red : null);
     txt('HP', 34, 21, C.mist, 8, 'left', null);
+    // 지금 걸린 마모(CLEAN 동안은 꺼진 채 회색): 무엇이 나를 방해하는지 늘 보이게
+    let dx = 8;
+    for (const d of debuffsAt(S.lap)) { const c = S.clean > 0 ? '#3c4a52' : C.pink; tri(dx, 36, false, c); txt(d, dx + 10, 34, c, 8, 'left', null); dx += 16 + Math.ceil(ctx.measureText(d).width); }
     const mult = comboMult();
     if (mult > 1) num('x' + mult, 80, 10, mult > 5 ? C.pink : C.yellow, 8);
     hi(IMG.hud, HU.arm, 6, H - 30);
@@ -1937,15 +2152,20 @@
   }
   // ▲▼ 작은 픽셀 삼각형 (테이프 마모 표·라벨)
   const tri = (x, y, up, c) => { for (let r = 0; r < 4; r++) R(c, x + (up ? 3 - r : r), y + r, (up ? r : 3 - r) * 2 + 1, 1); };
-  // 새 마모 단계가 시작되면 위쪽에 카세트 라벨처럼: 무엇이 닳았고(▼) 무엇을 얻었는지(▲)
+  // ◆ 작은 픽셀 마름모 (걷힌 마모)
+  const diamond = (x, y, c) => { for (let r = 0; r < 5; r++) { const w = r <= 2 ? r * 2 + 1 : (4 - r) * 2 + 1; R(c, x + 3 - (w >> 1), y + r, w, 1); } };
+  // 바퀴가 바뀌어 무엇이 달라졌는지 위쪽에 카세트 라벨처럼: 새로 닳은 것(▼) · 바퀴가 걷어 준 것(◆) · 새 기능이나 능력 성장(▲)
   function drawTapeCard() {
-    const t = TAPE[wear()], g = TAPE[wearMax()]; if (!g || S.tapeCard <= 0 || loopBusy() || S.banner > 0 || mode !== 'play') return;
-    const w = 272, x = Math.round(W / 2 - w / 2), y = 34;
+    const card = S.card; if (!card || S.tapeCard <= 0 || loopBusy() || S.banner > 0 || mode !== 'play') return;
+    const w = 272, x = Math.round(W / 2 - w / 2), y = 34, h = 20 + card.length * 13;
     ctx.globalAlpha = Math.min(1, S.tapeCard / 20, (240 - S.tapeCard) / 12);
-    R(C.ink, x + 2, y + 2, w, 46); R(C.ink, x - 1, y - 1, w + 2, 48); R('#0a1c26', x, y, w, 46); R(C.teal, x, y, w, 2);
+    R(C.ink, x + 2, y + 2, w, h); R(C.ink, x - 1, y - 1, w + 2, h + 2); R('#0a1c26', x, y, w, h); R(C.teal, x, y, w, 2);
     txt('LOOP ' + S.lap + '  TAPE WEAR', x + 6, y + 5, C.mist, 8, 'left', null);
-    if (t) { tri(x + 6, y + 21, false, C.pink); txt(t.bad, x + 16, y + 19, C.pink, 8, 'left', null); ktxt(t.badK, x + 92, y + 17, C.paper, 11, 'left', 700); }
-    tri(x + 6, y + 34, true, C.glow); txt(g.good, x + 16, y + 32, C.glow, 8, 'left', null); ktxt(g.goodK, x + 92, y + 30, C.white, 11, 'left', 700);
+    card.forEach((l, i) => {
+      const ly = y + 19 + i * 13, col = l.k === 'bad' ? C.pink : l.k === 'clean' ? C.white : C.glow;
+      if (l.k === 'clean') diamond(x + 6, ly + 1, col); else tri(x + 6, ly + 2, l.k === 'good', col);
+      txt(l.name, x + 16, ly, col, 8, 'left', null); ktxt(l.text, x + 92, ly - 2, l.k === 'bad' ? C.paper : C.white, 11, 'left', 700);
+    });
     ctx.globalAlpha = 1;
   }
   function feature(nn, title, desc, x, y, icon) {
