@@ -1,0 +1,4 @@
+
+/* ================= 전체 화면 ================= */
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--void);overflow:hidden}
+.screen canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;user-select:none;-webkit-user-select:none}

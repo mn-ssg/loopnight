@@ -1,0 +1,17 @@
+/* Layout: 기준 1920×1080(16:9). 캔버스 크기는 game.js의 fit()이 창에 맞춰 정한다 — 16:10~21:9 창은 가로 시야를 넓혀 빈틈없이 채우고,
+   그보다 극단적인 비율에서만 남는 쪽이 게임의 밤색 여백이 된다. */
+
+/* ================= 기본 ================= */
+:root{
+  --void:#02060a;
+  --label:#bdf3ee;
+  color-scheme:dark;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0;background:var(--void);color:var(--label);overflow:hidden}
+body{padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}
+img{max-width:100%}
+[hidden]:not([hidden=until-found i]){display:none!important}
