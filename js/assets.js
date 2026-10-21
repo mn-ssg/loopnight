@@ -5,11 +5,11 @@
   const FILES = { hero:'images/hero.png', bg:'images/bg.png', haz:'images/haz.png', hud:'images/hud.png', words:'images/words.png', ring:'images/ring.png', logo:'images/logo.png', egg:'images/egg.png', under:'images/under.png', signs:'images/signs.png', keys:'images/keys.png', band:'images/band.png', hero_x:'images/hero_x.png', gate:'images/gate.png' };
   // under.png: bg.png·표지를 참고로 Higgsfield에서 뽑은 고가도로 아래 도시. 0~TRUSS행은 상판 밑 트러스, 그 아래는 협곡
   const assetsReady = Promise.all(Object.entries(FILES).map(([k, f]) => load(f).then(i => { IMG[k] = i; })));
-  // logo.png · words.png: 새 로고와 게임 스프라이트를 참고로 Higgsfield에서 한 장에 함께 뽑은 픽셀 글자 세트(같은 글꼴).
-  // 실제 픽셀 격자를 찾아 1칸 = 게임 1픽셀로 다시 찍고 게임 팔레트로 맞춘 것 — 위는 흰색, 아래는 옅은 청록, 남색 외곽선, LOOP의 O는 카세트 릴
+  // logo.png: Figma 게임 표지 그림의 LOOP NIGHT 로고를 Higgsfield 배경 제거로 오려낸 고해상도 투명 PNG(주인공 부츠를 걷고 받침 안쪽 구멍을 메움)
+  // words.png: 그 로고를 참고로 Higgsfield(GPT Image 2.5)에서 같은 글꼴로 뽑은 GAME OVER · HOW TO PLAY · PERFECT — LED 도트, 위 흰색·아래 청록 띠, 검은 받침, 청록 계단 외곽선
   const HZ = { drone:[0,0,19,16], bar:[21,0,25,22], crate:[48,0,27,38], block:[77,0,27,14], spring:[106,0,19,12], gate:[127,0,73,48], sign:[202,0,13,18], car:[217,0,52,18], broken:[271,0,18,9], cas:[291,0,16,10] };
   const HU = { portrait:[0,0,51,48], bar10:[53,0,151,22], seg:[206,0,42,14], ring0:[250,0,52,50], ring1:[304,0,51,50], arm:[357,0,48,48], bar5:[407,0,82,22] };
-  const WD = { over:[0, 0, 154, 19], how:[156, 0, 182, 19], perfect:[340, 0, 130, 19] };
+  const WD = { over:[0, 0, 1641, 332], how:[1645, 0, 1805, 332], perfect:[3454, 0, 1275, 332] };
   // signs.png: 위험물 스프라이트·배경·표지를 참고로 Higgsfield에서 뽑은 간판과 점프대
   // o = 네온만 꺼진 같은 그림(깜빡임용) · n = 네온 픽셀만 남긴 흰 마스크(색 번짐·반짝임을 네온에만 입히려고)
   const SG = { low64:[0,0,64,23], low64o:[65,0,64,23], low50:[130,0,50,18], low50o:[181,0,50,18], low36:[232,0,36,13], low36o:[269,0,36,13],
@@ -41,7 +41,12 @@
     TCACHE.set(key, c); return c;
   }
   const sgTint = (k, col) => tintPart(IMG.signs, SG[k], col);
-  const word = (n, cx, y) => pix(IMG.words, WD[n], Math.round(cx - WD[n][2] / 2), y); // 픽셀 글자는 1:1, 정수 위치에만
+  // 고해상도 글자를 높이 WORD_H(논리 px)로 부드럽게 줄여 그린다(가운데 정렬)
+  function word(n, cx, y) {
+    const m = WD[n], img = IMG.words; if (!ok(img)) return;
+    const h = WORD_H, w = m[2] * h / m[3];
+    ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, m[0], m[1], m[2], m[3], cx - w / 2, y, w, h); ctx.restore();
+  }
 
   const CW = 37, CH = 38;
   let TINT = null, XTINT = null;

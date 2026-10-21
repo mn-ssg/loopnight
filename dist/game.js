@@ -52,11 +52,11 @@
   const FILES = { hero:'images/hero.png', bg:'images/bg.png', haz:'images/haz.png', hud:'images/hud.png', words:'images/words.png', ring:'images/ring.png', logo:'images/logo.png', egg:'images/egg.png', under:'images/under.png', signs:'images/signs.png', keys:'images/keys.png', band:'images/band.png', hero_x:'images/hero_x.png', gate:'images/gate.png' };
   // under.png: bg.png·표지를 참고로 Higgsfield에서 뽑은 고가도로 아래 도시. 0~TRUSS행은 상판 밑 트러스, 그 아래는 협곡
   const assetsReady = Promise.all(Object.entries(FILES).map(([k, f]) => load(f).then(i => { IMG[k] = i; })));
-  // logo.png · words.png: 새 로고와 게임 스프라이트를 참고로 Higgsfield에서 한 장에 함께 뽑은 픽셀 글자 세트(같은 글꼴).
-  // 실제 픽셀 격자를 찾아 1칸 = 게임 1픽셀로 다시 찍고 게임 팔레트로 맞춘 것 — 위는 흰색, 아래는 옅은 청록, 남색 외곽선, LOOP의 O는 카세트 릴
+  // logo.png: Figma 게임 표지 그림의 LOOP NIGHT 로고를 Higgsfield 배경 제거로 오려낸 고해상도 투명 PNG(주인공 부츠를 걷고 받침 안쪽 구멍을 메움)
+  // words.png: 그 로고를 참고로 Higgsfield(GPT Image 2.5)에서 같은 글꼴로 뽑은 GAME OVER · HOW TO PLAY · PERFECT — LED 도트, 위 흰색·아래 청록 띠, 검은 받침, 청록 계단 외곽선
   const HZ = { drone:[0,0,19,16], bar:[21,0,25,22], crate:[48,0,27,38], block:[77,0,27,14], spring:[106,0,19,12], gate:[127,0,73,48], sign:[202,0,13,18], car:[217,0,52,18], broken:[271,0,18,9], cas:[291,0,16,10] };
   const HU = { portrait:[0,0,51,48], bar10:[53,0,151,22], seg:[206,0,42,14], ring0:[250,0,52,50], ring1:[304,0,51,50], arm:[357,0,48,48], bar5:[407,0,82,22] };
-  const WD = { over:[0, 0, 154, 19], how:[156, 0, 182, 19], perfect:[340, 0, 130, 19] };
+  const WD = { over:[0, 0, 1641, 332], how:[1645, 0, 1805, 332], perfect:[3454, 0, 1275, 332] };
   // signs.png: 위험물 스프라이트·배경·표지를 참고로 Higgsfield에서 뽑은 간판과 점프대
   // o = 네온만 꺼진 같은 그림(깜빡임용) · n = 네온 픽셀만 남긴 흰 마스크(색 번짐·반짝임을 네온에만 입히려고)
   const SG = { low64:[0,0,64,23], low64o:[65,0,64,23], low50:[130,0,50,18], low50o:[181,0,50,18], low36:[232,0,36,13], low36o:[269,0,36,13],
@@ -88,7 +88,12 @@
     TCACHE.set(key, c); return c;
   }
   const sgTint = (k, col) => tintPart(IMG.signs, SG[k], col);
-  const word = (n, cx, y) => pix(IMG.words, WD[n], Math.round(cx - WD[n][2] / 2), y); // 픽셀 글자는 1:1, 정수 위치에만
+  // 고해상도 글자를 높이 WORD_H(논리 px)로 부드럽게 줄여 그린다(가운데 정렬)
+  function word(n, cx, y) {
+    const m = WD[n], img = IMG.words; if (!ok(img)) return;
+    const h = WORD_H, w = m[2] * h / m[3];
+    ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(img, m[0], m[1], m[2], m[3], cx - w / 2, y, w, h); ctx.restore();
+  }
 
   const CW = 37, CH = 38;
   let TINT = null, XTINT = null;
@@ -237,7 +242,8 @@
   // 출발선 앞 구간엔 게이트가 GATE_GAP마다 똑같이 다시 지나가서, 세계 자체가 반복된다는 걸 말없이 보여준다
   // IDLE_T 동안 입력이 없으면 설명·기록 페이지(INFO_T씩 4장)를 같은 배경 위에 보여주고 돌아온다
   // 시작(ENTER_T, 약 1초): 로고가 사라지고 → 카메라가 플레이 위치로 올라오며 → 주인공이 달려 들어와(ENTER_CTRL부터 조작) → HUD가 켜진다
-  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = .54, LOGO_GLOW = .2;
+  // LOGO_W 로고 폭(논리 px, 예전 픽셀 로고와 같은 폭) · WORD_H words.png 글자 높이(논리 px)
+  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = 214, LOGO_GLOW = .2, WORD_H = 26;
   const GATE_AP = [600, 300, 120], WARP_T = 45, WARP_PER = 4, OSD_T = 150, OSD_BIG = 72, SNAP_EVERY = 20, SNAP_MAX = 36;
   // 깨진 CRT 자막으로 새어 나오는 시스템 메시지 (LOOP_은 지금 바퀴 번호가 붙는다)
   const GLITCH = ['REWIND', 'TIME ERROR', 'AGAIN', '00:00:00', '<<', 'TRACKING', 'ERR 0x0F', 'LOOP_'], GLITCH_HIT = ['REWIND', '<<', '-00:00:01:36', 'ERR'];
@@ -2179,24 +2185,35 @@
   /* ================= 타이틀 ================= */
   // 화면 위엔 로고와 PRESS ANY KEY만. 로고 뒤에만 아주 옅은 타원 어둠과 그림자를 깔아(박스 없이) 흐르는 배경이 그대로 보이면서도 읽힌다
   // 평소엔 조용하다: 6~9초에 한 번 로고가 몇 프레임 살짝 찢어지며 색이 갈라지거나 밝기가 흔들리고, PRESS ANY KEY는 박자에 맞춰 밝기만 숨 쉰다
+  // 색 갈라짐용 사본: 실루엣을 칠하지 않고 로고에 색을 곱한다 — 검은 받침은 검은 채로 남아 밝은 글자만 분홍/청록으로 번진다
+  const SPLIT = new Map();
+  function splitTint(img, col) {
+    const key = img.src + col; if (SPLIT.has(key)) return SPLIT.get(key);
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = col; g.fillRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(img, 0, 0);
+    SPLIT.set(key, c); return c;
+  }
   function drawLogo(a, t) {
     const lg = IMG.logo; if (!ok(lg) || a <= 0) return;
-    // 픽셀 로고: 화면 너비의 LOGO_W를 넘지 않는 가장 큰 정수 배율로만 키운다(픽셀이 고르게 남게)
-    const k = Math.max(1, Math.floor(W * LOGO_W / lg.width)), w = lg.width * k, h = lg.height * k, x = Math.round(W / 2 - w / 2), y = Math.round(H * .3 - h / 2), cy = y + h / 2;
+    // 표지 로고(고해상도): 예전 픽셀 로고와 같은 폭 LOGO_W(논리 px), 같은 자리에 부드럽게 줄여 그린다
+    const w = LOGO_W, h = w * lg.height / lg.width, x = W / 2 - w / 2, y = H * .3 - h / 2, cy = y + h / 2;
     const g = ctx.createRadialGradient(W / 2, cy, 0, W / 2, cy, w * .62); g.addColorStop(0, `rgba(2,6,10,${(.6 * a).toFixed(3)})`); g.addColorStop(1, 'rgba(2,6,10,0)');
     ctx.save(); ctx.translate(W / 2, cy); ctx.scale(1, .4); ctx.translate(-W / 2, -cy); ctx.fillStyle = g; ctx.fillRect(0, cy - w * .62, W, w * 1.24); ctx.restore();
     // 시작해서 사라지는 중엔 글리치 없이 조용히 빠진다
     const cyc = t % 480, gl = mode === 'title' && cyc > 470 - Math.floor(hash(Math.floor(t / 480)) * 90) && cyc <= 474 - Math.floor(hash(Math.floor(t / 480)) * 90), flick = mode === 'title' && (cyc === 233 || cyc === 235);
-    ctx.globalAlpha = .7 * a; ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.ink), x + k, y + 2 * k, w, h);
+    ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     if ('filter' in ctx) { ctx.filter = 'blur(3px)'; ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = LOGO_GLOW * a; ctx.drawImage(lg, x, y, w, h); ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over'; }
     ctx.globalAlpha = a * (flick ? .55 : 1); ctx.drawImage(lg, x, y, w, h);
     if (gl) {
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .5 * a;
-      ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.pink), x - 2, y, w, h); ctx.drawImage(tintPart(lg, [0, 0, lg.width, lg.height], C.glow), x + 2, y, w, h);
+      ctx.drawImage(splitTint(lg, C.pink), x - 2, y, w, h); ctx.drawImage(splitTint(lg, C.glow), x + 2, y, w, h);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = a;
-      for (let i = 0; i < 2; i++) { const sy = Math.floor(hash(t * .7 + i) * lg.height * .8), sh = Math.max(1, Math.floor(lg.height * (.08 + hash(t + i) * .1))); ctx.drawImage(lg, 0, sy, lg.width, sh, x + (i ? 2 : -2) * k, y + sy * k, w, sh * k); }
+      const s = h / lg.height;
+      for (let i = 0; i < 2; i++) { const sy = Math.floor(hash(t * .7 + i) * lg.height * .8), sh = Math.max(1, Math.floor(lg.height * (.08 + hash(t + i) * .1))); ctx.drawImage(lg, 0, sy, lg.width, sh, x + (i ? 2 : -2), y + sy * s, w, sh * s); }
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
   }
   function drawPressKey(a, t) {
     if (a <= 0) return;

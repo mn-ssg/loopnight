@@ -50,7 +50,8 @@
   // 출발선 앞 구간엔 게이트가 GATE_GAP마다 똑같이 다시 지나가서, 세계 자체가 반복된다는 걸 말없이 보여준다
   // IDLE_T 동안 입력이 없으면 설명·기록 페이지(INFO_T씩 4장)를 같은 배경 위에 보여주고 돌아온다
   // 시작(ENTER_T, 약 1초): 로고가 사라지고 → 카메라가 플레이 위치로 올라오며 → 주인공이 달려 들어와(ENTER_CTRL부터 조작) → HUD가 켜진다
-  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = .54, LOGO_GLOW = .2;
+  // LOGO_W 로고 폭(논리 px, 예전 픽셀 로고와 같은 폭) · WORD_H words.png 글자 높이(논리 px)
+  const TITLE_CAM = 150, GATE_GAP = 720, IDLE_T = 1200, INFO_T = 360, ENTER_T = 56, ENTER_CTRL = 34, LOGO_W = 214, LOGO_GLOW = .2, WORD_H = 26;
   const GATE_AP = [600, 300, 120], WARP_T = 45, WARP_PER = 4, OSD_T = 150, OSD_BIG = 72, SNAP_EVERY = 20, SNAP_MAX = 36;
   // 깨진 CRT 자막으로 새어 나오는 시스템 메시지 (LOOP_은 지금 바퀴 번호가 붙는다)
   const GLITCH = ['REWIND', 'TIME ERROR', 'AGAIN', '00:00:00', '<<', 'TRACKING', 'ERR 0x0F', 'LOOP_'], GLITCH_HIT = ['REWIND', '<<', '-00:00:01:36', 'ERR'];
